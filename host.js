@@ -16,7 +16,7 @@ const validId=id=>typeof id==='string'&&/^[a-z0-9]{12}$/.test(id);
 const here=dirname(fileURLToPath(import.meta.url));
 const mime={'.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.html':'text/html; charset=utf-8'};
 
-export async function loadGame(path,{createEngine}={}){const bytes=await readFile(path);return {pack:parsePackage(bytes,{allowNative:typeof createEngine==='function'}),hash:digest(bytes),createEngine};}
+export async function loadGame(path,{createEngine}={}){const bytes=await readFile(path);return {pack:parsePackage(bytes,{allowNative:typeof createEngine==='function'}),source:bytes.toString('utf8'),hash:digest(bytes),createEngine};}
 export function fileRoomStore(directory){return {async list(){await mkdir(directory,{recursive:true});const result=[];for(const name of await readdir(directory)){if(!/^[a-z0-9]{12}\.json$/.test(name))continue;try{result.push(JSON.parse(await readFile(resolve(directory,name),'utf8')));}catch{}}return result;},async put(room){await mkdir(directory,{recursive:true});const path=resolve(directory,room.id+'.json');await writeFile(path+'.tmp',JSON.stringify(room),{mode:0o600});await rename(path+'.tmp',path);}};}
 
 export async function createGameHost({definitions,store,publicOrigin,clock=Date.now,maxRooms=32}={}){
@@ -26,10 +26,10 @@ export async function createGameHost({definitions,store,publicOrigin,clock=Date.
  const serialize=room=>({id:room.id,game:room.game,packageHash:room.definition.hash,hostHash:room.hostHash,members:room.members,language:room.language,updatedAt:room.updatedAt,party:room.party.save()});
  const persist=room=>{room.saving=(room.saving||Promise.resolve()).catch(()=>{}).then(()=>store?.put(serialize(room)));return room.saving;};
  function publicProfile(value){const p=validateProfile(value);if(!p.avatar)return p;const id=hash(p.avatar);avatars.set(id,Buffer.from(p.avatar.split(',')[1],'base64'));return {...p,avatar:'/avatars/'+id+'.jpg'};}
- if(store?.putPackage)await Promise.all(definitions.map(d=>store.putPackage(d.hash,d.pack)));
+ if(store?.putPackage)await Promise.all(definitions.map(d=>store.putPackage(d.hash,d.source||JSON.stringify(d.pack))));
  if(store)for(const saved of await store.list()){
   let definition=packages.get(saved.packageHash);const current=games.get(saved.game);
-  if(!definition&&current&&store.getPackage){try{const pack=await store.getPackage(saved.packageHash);const bytes=JSON.stringify(pack);if(digest(bytes)!==saved.packageHash)throw Error('Package integrity mismatch');definition={pack:parsePackage(bytes,{allowNative:Boolean(current.createEngine)}),hash:saved.packageHash,createEngine:current.createEngine};packages.set(definition.hash,definition);}catch(error){console.error('Pinned package restore failed',saved.id,error.message);}}
+  if(!definition&&current&&store.getPackage){try{const source=await store.getPackage(saved.packageHash);if(digest(source)!==saved.packageHash)throw Error('Package integrity mismatch');definition={pack:parsePackage(source,{allowNative:Boolean(current.createEngine)}),source,hash:saved.packageHash,createEngine:current.createEngine};packages.set(definition.hash,definition);}catch(error){console.error('Pinned package restore failed',saved.id,error.message);}}
   if(!definition||!validId(saved.id)||clock()-saved.updatedAt>86400000)continue;
   try{const room={...saved,definition,party:new RoomParty({definition,clock,saved:saved.party})};for(const member of Object.values(room.members)){const player=room.party.players.find(p=>p.id===member.id);if(player)Object.assign(player,publicProfile(member.profile));}rooms.set(room.id,room);}catch(error){console.error('Room restore failed',saved.id,error.message);}
  }

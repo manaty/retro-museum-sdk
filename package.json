@@ -1,6 +1,6 @@
 {
   "name": "@manaty/retro-museum-sdk",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "type": "module",
   "license": "MIT",
   "description": "Retro Museum game contract, isolated runtime and validation",
@@ -8,19 +8,28 @@
     ".": "./index.js",
     "./runtime": "./runtime.js",
     "./manifest": "./manifest.js",
-    "./party": "./party.js"
+    "./party": "./party.js",
+    "./host": "./host.js",
+    "./room-party": "./room-party.js"
   },
   "scripts": {
-    "test": "node --test test/*.test.js"
+    "test": "node --test test/*.test.js",
+    "build": "esbuild web/host-source.js --bundle --format=iife --target=chrome58 --minify --outfile=web/host-client.js"
   },
   "dependencies": {
-    "quickjs-emscripten": "0.31.0"
+    "qrcode": "1.5.4",
+    "quickjs-emscripten": "0.31.0",
+    "ws": "8.21.3"
   },
   "engines": {
     "node": ">=22"
   },
   "bin": {
     "retro-museum-create": "./create-game.js",
-    "retro-museum-validate": "./validate.js"
+    "retro-museum-validate": "./validate.js",
+    "retro-museum-host": "./serve.js"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2"
   }
 }

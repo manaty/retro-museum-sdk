@@ -1,0 +1,24 @@
+{
+  "name": "@manaty/retro-museum-sdk",
+  "version": "1.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Retro Museum game contract, isolated runtime and validation",
+  "exports": {
+    ".": "./index.js",
+    "./runtime": "./runtime.js",
+    "./manifest": "./manifest.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  },
+  "dependencies": {
+    "quickjs-emscripten": "0.31.0"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "retro-museum-create": "./create-game.js"
+  }
+}

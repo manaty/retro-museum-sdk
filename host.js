@@ -26,8 +26,9 @@ export function fileRoomStore(directory){
  async getPackage(id){return readFile(packagePath(id),'utf8');}
  };}
 
-export async function createGameHost({definitions,store,publicOrigin,allowedOrigins=[],clock=Date.now,maxRooms=32}={}){
+export async function createGameHost({definitions,store,publicOrigin,allowedOrigins=[],refreshGames,clock=Date.now,maxRooms=32}={}){
  const games=new Map(definitions.map(d=>[d.pack.manifest.id,d])),packages=new Map(definitions.map(d=>[d.hash,d])),rooms=new Map(),clients=new Map(),avatars=new Map(),limits=new Map();let closing=false;
+ const prunePackages=()=>{const used=new Set([...games.values(),...[...rooms.values()].map(room=>room.definition)].map(d=>d.hash));for(const id of packages.keys())if(!used.has(id))packages.delete(id);};
  const json=(res,status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
  const rate=(key,max=30,period=60000)=>{const now=clock(),old=limits.get(key);const value=!old||old.until<now?{n:0,until:now+period}:old;value.n++;limits.set(key,value);return value.n<=max;};
  const serialize=room=>({id:room.id,game:room.game,packageHash:room.definition.hash,hostHash:room.hostHash,members:room.members,language:room.language,updatedAt:room.updatedAt,party:room.party.save()});
@@ -36,7 +37,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
  if(store?.putPackage)await Promise.all(definitions.map(d=>store.putPackage(d.hash,d.source||JSON.stringify(d.pack))));
  if(store)for(const saved of await store.list()){
   let definition=packages.get(saved.packageHash);const current=games.get(saved.game);
-  if(!definition&&current&&store.getPackage){try{const source=await store.getPackage(saved.packageHash);if(digest(source)!==saved.packageHash)throw Error('Package integrity mismatch');definition={pack:parsePackage(source,{allowNative:Boolean(current.createEngine)}),source,hash:saved.packageHash,createEngine:current.createEngine};packages.set(definition.hash,definition);}catch(error){console.error('Pinned package restore failed',saved.id,error.message);}}
+  if(!definition&&store.getPackage){try{const source=await store.getPackage(saved.packageHash);if(digest(source)!==saved.packageHash)throw Error('Package integrity mismatch');definition={pack:parsePackage(source,{allowNative:Boolean(current?.createEngine)}),source,hash:saved.packageHash,createEngine:current?.createEngine};packages.set(definition.hash,definition);}catch(error){console.error('Pinned package restore failed',saved.id,error.message);}}
   if(!definition||!validId(saved.id)||clock()-saved.updatedAt>86400000)continue;
   try{const room={...saved,definition,party:new RoomParty({definition,clock,saved:saved.party})};for(const member of Object.values(room.members)){const player=room.party.players.find(p=>p.id===member.id);if(player)Object.assign(player,publicProfile(member.profile));}rooms.set(room.id,room);}catch(error){console.error('Room restore failed',saved.id,error.message);}
  }
@@ -51,11 +52,11 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
    const url=new URL(req.url,'http://host');const path=url.pathname;
    if(req.method==='POST'&&!permitted(req))return json(res,403,{error:'Invalid origin'});
    if(path==='/health')return json(res,200,{ok:true,rooms:rooms.size,games:[...games.keys()]});
-   if(path==='/api/games')return json(res,200,definitions.map(d=>({...d.pack.manifest,hash:d.hash})));
+   if(path==='/api/games'){const requested=url.searchParams.get('game');if(requested&&!games.has(requested))await refreshGames?.();else Promise.resolve(refreshGames?.()).catch(()=>{});return json(res,200,[...games.values()].map(d=>({...d.pack.manifest,hash:d.hash})));}
    if(path==='/api/rooms'&&req.method==='POST'){
     if(!rate('create:'+req.socket.remoteAddress,10))return json(res,429,{error:'Please wait before creating another room.'});
     if(rooms.size>=maxRooms)return json(res,503,{error:'All rooms are busy. Please try again shortly.'});
-    const input=await body(req),definition=games.get(input.game);if(!definition)return json(res,400,{error:'Unknown game'});
+    const input=await body(req);if(!games.has(input.game))await refreshGames?.();const definition=games.get(input.game);if(!definition)return json(res,400,{error:'Unknown game'});
     const id=randomBytes(6).toString('hex'),hostToken=token(),room={id,game:input.game,definition,hostHash:hash(hostToken),members:{},language:['en','fr','tl'].includes(input.language)?input.language:'en',updatedAt:clock(),party:new RoomParty({definition,clock})};
     rooms.set(id,room);await persist(room);return json(res,201,{id,hostToken,displayUrl:origin(req)+'/r/'+id,joinUrl:origin(req)+'/j/'+id});
    }
@@ -133,7 +134,10 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
   }
  },25);
  const heartbeat=setInterval(()=>{for(const [ws,c] of clients){if(!c.alive){ws.terminate();continue;}c.alive=false;ws.ping();c.room.updatedAt=clock();}for(const [key,value] of limits)if(value.until<clock())limits.delete(key);},10000);
- const checkpoints=setInterval(()=>{for(const room of rooms.values()){if(clock()-room.updatedAt>86400000){room.party.dispose();rooms.delete(room.id);}else persist(room).catch(console.error);}},15000);
- return {server,rooms,async close(){closing=true;clearInterval(ticker);clearInterval(heartbeat);clearInterval(checkpoints);for(const ws of wss.clients)ws.terminate();await new Promise(resolve=>wss.close(resolve));await Promise.all([...rooms.values()].map(persist));for(const room of rooms.values())room.party.dispose();await new Promise(resolve=>server.close(resolve));}};
+ const checkpoints=setInterval(()=>{for(const room of rooms.values()){if(clock()-room.updatedAt>86400000){room.party.dispose();rooms.delete(room.id);}else persist(room).catch(console.error);}prunePackages();},15000);
+ return {server,rooms,
+ async registerGame(definition){if(closing)throw Error('Host is closing');const source=definition.source||JSON.stringify(definition.pack);if(digest(source)!==definition.hash)throw Error('Package integrity mismatch');const pack=parsePackage(source,{allowNative:Boolean(definition.createEngine)});await store?.putPackage?.(definition.hash,source);const pinned={...definition,pack,source};packages.set(pinned.hash,pinned);games.set(pack.manifest.id,pinned);prunePackages();},
+ removeGame(id){games.delete(id);prunePackages();},
+ async close(){closing=true;clearInterval(ticker);clearInterval(heartbeat);clearInterval(checkpoints);for(const ws of wss.clients)ws.terminate();await new Promise(resolve=>wss.close(resolve));await Promise.all([...rooms.values()].map(persist));for(const room of rooms.values())room.party.dispose();await new Promise(resolve=>server.close(resolve));}};
 }
 function safeMessageId(bytes){try{const id=JSON.parse(bytes.toString()).id;return typeof id==='string'?id.slice(0,100):undefined;}catch{return undefined;}}

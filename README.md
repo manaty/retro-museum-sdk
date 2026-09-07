@@ -54,3 +54,9 @@ A passing Action is feedback for the author, **not marketplace approval**. The m
 The standalone host accepts optional `allowedOrigins` alongside `publicOrigin` when migrating a domain. Invitations stay on the recognised hostname used by each visitor, so existing links and locally stored player profiles continue to work. Local and cloud room stores retain the exact game package pinned to each room.
 
 Views may announce `{ retroMuseum: 1, type: 'ready', renderAck: true }` and answer each state with `{ retroMuseum: 1, type: 'rendered', renderId }` after rendering. This prevents slow displays from accumulating obsolete frames. Existing views without this capability remain supported. A `suspend` message asks the view to release held controls and conceal temporary private cards when host settings open.
+
+## Player invitations and live catalogs
+
+Every standalone player screen includes **Invite a player**, translated into English, French and Tagalog. It opens the device's native share sheet when available, then falls back to copying or selecting the invitation URL. Cancelling a share does not copy anything. The payload contains the public join URL, never a player credential or organiser token. The museum can reuse this control through `@manaty/retro-museum-sdk/share`.
+
+Hosts can add approved immutable packages through `registerGame(definition)` and remove games from new-room listings through `removeGame(id)`. Existing rooms keep their original package, including after restart. `refreshGames` allows a host to resolve a newly published game when its direct URL is opened. Package registration is an operator-side API; no public route accepts arbitrary code or repository URLs.

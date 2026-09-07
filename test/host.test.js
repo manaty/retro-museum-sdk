@@ -23,8 +23,11 @@ test('local updates retain the exact package used by existing rooms',async()=>{
  let host=await createGameHost({definitions:[old],store});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));
  const room=await (await fetch('http://127.0.0.1:'+host.server.address().port+'/api/rooms',{method:'POST',body:JSON.stringify({game:'test-game'})})).json();await host.close();
  const nextPack={...pack,manifest:{...pack.manifest,version:'1.0.1'},view:pack.view.replace('Test','Updated')},nextSource=JSON.stringify(nextPack);
- host=await createGameHost({definitions:[{pack:nextPack,source:nextSource,hash:digest(nextSource)}],store});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));
- try{assert.equal(host.rooms.get(room.id).definition.hash,old.hash);assert.equal(await store.getPackage(old.hash),source);await assert.rejects(store.getPackage('../elsewhere'),/Invalid package hash/);}finally{await host.close();}
+ host=await createGameHost({definitions:[],store});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));
+ try{const origin='http://127.0.0.1:'+host.server.address().port;assert.equal(host.rooms.get(room.id).definition.hash,old.hash);assert.equal(await store.getPackage(old.hash),source);await assert.rejects(store.getPackage('../elsewhere'),/Invalid package hash/);
+ await host.registerGame({pack:nextPack,source:nextSource,hash:digest(nextSource)});assert.equal((await(await fetch(origin+'/api/games')).json())[0].version,'1.0.1');assert.equal(host.rooms.get(room.id).definition.hash,old.hash);
+ host.removeGame('test-game');assert.deepEqual(await(await fetch(origin+'/api/games')).json(),[]);assert.equal((await fetch(origin+'/packages/'+old.hash+'/view')).status,200);assert.equal((await fetch(origin+'/packages/'+digest(nextSource)+'/view')).status,404);
+ }finally{await host.close();}
 });
 test('recognised hostnames preserve invitation origin and reject foreign browser origins',async()=>{
  const host=await createGameHost({definitions:[definition],publicOrigin:'https://play.retro-museum.net',allowedOrigins:['https://legacy.example']});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));

@@ -1,15 +1,38 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {WebSocket} from 'ws';
-import {createGameHost} from '../host.js';
+import {createGameHost,fileRoomStore} from '../host.js';
+import {digest} from '../manifest.js';
+import {mkdtemp} from 'node:fs/promises';
+import {tmpdir} from 'node:os';
+import {join} from 'node:path';
+import http from 'node:http';
 import {RoomParty} from '../room-party.js';
 const definition={hash:'a'.repeat(64),pack:{manifest:{id:'test-game',version:'1.0.0',title:{en:'Test'},description:{en:'A test'},players:{min:2,max:4},durationMinutes:15,options:{}},engine:`globalThis.RetroMuseumGame={create(players,saved){let n=saved?.n||0;return {snapshot(id){return {n,...(id?{private:{card:id}}:{})}},save(){return {n}},advance(){},action(id,a){if(a!=='move')throw Error('invalid');n++},status(){return {winner:null,requiredPlayers:players.map(p=>p.id)}},release(){},addPlayer(){}}}}`,view:'<!doctype html><html><body>Test</body></html>',assets:{}}};
-test('late arrivals join the next match; eliminated players do not block resume; stale commands fail',()=>{
+test('late arrivals join the next match; temporary disconnection gets a grace period; stale commands fail',()=>{
  let now=0;const party=new RoomParty({definition,clock:()=>now});try{
  party.join('a');party.join('b');party.admin('start');const old=party.id;now=3001;party.tick();party.join('c');assert.equal(party.players.find(p=>p.id==='c').spectator,true);assert.throws(()=>party.command('c',{matchId:old,id:'x',action:'move'}),/spectator/);
  party.leave('b');now+=19999;party.tick();assert.equal(party.phase,'playing');now+=2;party.tick();assert.equal(party.phase,'paused');party.join('b');assert.equal(party.phase,'playing');
  party.admin('end');party.admin('playAgain');party.admin('start');now+=3001;party.tick();assert.equal(party.players.find(p=>p.id==='c').spectator,false);assert.throws(()=>party.command('a',{matchId:old,id:'x',action:'move'}),/oldMatch/);assert.throws(()=>party.command('a',{matchId:party.id,id:'x',action:'hostTimeUp'}),/invalidGameAction/);
  }finally{party.dispose();}
+});
+test('local updates retain the exact package used by existing rooms',async()=>{
+ const store=fileRoomStore(await mkdtemp(join(tmpdir(),'museum-package-')));
+ const pack={...definition.pack,manifest:{...definition.pack.manifest,schemaVersion:1,license:'MIT',languages:['en'],runtime:'quickjs-v1',entry:'dist/game.rmg.json',permissions:[],author:'Test'},licenseText:'Test attribution '.repeat(10)};
+ const source=JSON.stringify(pack),old={pack,source,hash:digest(source)};
+ let host=await createGameHost({definitions:[old],store});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));
+ const room=await (await fetch('http://127.0.0.1:'+host.server.address().port+'/api/rooms',{method:'POST',body:JSON.stringify({game:'test-game'})})).json();await host.close();
+ const nextPack={...pack,manifest:{...pack.manifest,version:'1.0.1'},view:pack.view.replace('Test','Updated')},nextSource=JSON.stringify(nextPack);
+ host=await createGameHost({definitions:[{pack:nextPack,source:nextSource,hash:digest(nextSource)}],store});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));
+ try{assert.equal(host.rooms.get(room.id).definition.hash,old.hash);assert.equal(await store.getPackage(old.hash),source);await assert.rejects(store.getPackage('../elsewhere'),/Invalid package hash/);}finally{await host.close();}
+});
+test('recognised hostnames preserve invitation origin and reject foreign browser origins',async()=>{
+ const host=await createGameHost({definitions:[definition],publicOrigin:'https://play.retro-museum.net',allowedOrigins:['https://legacy.example']});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));
+ try{const url='http://127.0.0.1:'+host.server.address().port+'/api/rooms';
+ const request=origin=>new Promise((resolve,reject)=>{const req=http.request(url,{method:'POST',headers:{Host:new URL(origin).host,Origin:origin}},res=>{let body='';res.on('data',bytes=>body+=bytes);res.on('end',()=>resolve({status:res.statusCode,body:JSON.parse(body)}));});req.on('error',reject);req.end(JSON.stringify({game:'test-game'}));});
+ for(const origin of ['https://play.retro-museum.net','https://legacy.example']){const response=await request(origin);assert.equal(response.status,201);assert.ok(response.body.joinUrl.startsWith(origin+'/j/'));}
+ const rejected=await fetch(url,{method:'POST',headers:{Host:'play.retro-museum.net',Origin:'https://unrelated.example'},body:JSON.stringify({game:'test-game'})});assert.equal(rejected.status,403);
+ }finally{await host.close();}
 });
 test('public rooms isolate controller credentials, private snapshots and host actions; sessions restore',async()=>{
  const saved=new Map(),store={list:async()=>[...saved.values()],put:async room=>saved.set(room.id,structuredClone(room))};let host=await createGameHost({definitions:[definition],store});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));let origin='http://127.0.0.1:'+host.server.address().port;const sockets=[];

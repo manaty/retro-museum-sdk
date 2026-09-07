@@ -50,3 +50,7 @@ node validate.js my-game
 ```
 
 A passing Action is feedback for the author, **not marketplace approval**. The marketplace fetches a fixed source commit, independently validates the exact artifact and applies its versioned content policy and AI review. Changes require a new submission. See [marketplace policy](https://github.com/manaty/retro-museum-marketplace/blob/main/POLICY.md).
+
+The standalone host accepts optional `allowedOrigins` alongside `publicOrigin` when migrating a domain. Invitations stay on the recognised hostname used by each visitor, so existing links and locally stored player profiles continue to work. Local and cloud room stores retain the exact game package pinned to each room.
+
+Views may announce `{ retroMuseum: 1, type: 'ready', renderAck: true }` and answer each state with `{ retroMuseum: 1, type: 'rendered', renderId }` after rendering. This prevents slow displays from accumulating obsolete frames. Existing views without this capability remain supported. A `suspend` message asks the view to release held controls and conceal temporary private cards when host settings open.

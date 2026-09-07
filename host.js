@@ -17,9 +17,16 @@ const here=dirname(fileURLToPath(import.meta.url));
 const mime={'.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.html':'text/html; charset=utf-8'};
 
 export async function loadGame(path,{createEngine}={}){const bytes=await readFile(path);return {pack:parsePackage(bytes,{allowNative:typeof createEngine==='function'}),source:bytes.toString('utf8'),hash:digest(bytes),createEngine};}
-export function fileRoomStore(directory){return {async list(){await mkdir(directory,{recursive:true});const result=[];for(const name of await readdir(directory)){if(!/^[a-z0-9]{12}\.json$/.test(name))continue;try{result.push(JSON.parse(await readFile(resolve(directory,name),'utf8')));}catch{}}return result;},async put(room){await mkdir(directory,{recursive:true});const path=resolve(directory,room.id+'.json');await writeFile(path+'.tmp',JSON.stringify(room),{mode:0o600});await rename(path+'.tmp',path);}};}
+export function fileRoomStore(directory){
+ const packagePath=id=>{if(!/^[a-f0-9]{64}$/.test(id))throw Error('Invalid package hash');return resolve(directory,'packages',id+'.json');};
+ return {
+ async list(){await mkdir(directory,{recursive:true});const result=[];for(const name of await readdir(directory)){if(!/^[a-z0-9]{12}\.json$/.test(name))continue;try{result.push(JSON.parse(await readFile(resolve(directory,name),'utf8')));}catch{}}return result;},
+ async put(room){if(!validId(room.id))throw Error('Invalid room ID');await mkdir(directory,{recursive:true});const path=resolve(directory,room.id+'.json');await writeFile(path+'.tmp',JSON.stringify(room),{mode:0o600});await rename(path+'.tmp',path);},
+ async putPackage(id,source){const path=packagePath(id);if(digest(source)!==id)throw Error('Package integrity mismatch');await mkdir(dirname(path),{recursive:true});try{await writeFile(path,source,{flag:'wx',mode:0o600});}catch(error){if(error.code!=='EEXIST')throw error;}},
+ async getPackage(id){return readFile(packagePath(id),'utf8');}
+ };}
 
-export async function createGameHost({definitions,store,publicOrigin,clock=Date.now,maxRooms=32}={}){
+export async function createGameHost({definitions,store,publicOrigin,allowedOrigins=[],clock=Date.now,maxRooms=32}={}){
  const games=new Map(definitions.map(d=>[d.pack.manifest.id,d])),packages=new Map(definitions.map(d=>[d.hash,d])),rooms=new Map(),clients=new Map(),avatars=new Map(),limits=new Map();let closing=false;
  const json=(res,status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
  const rate=(key,max=30,period=60000)=>{const now=clock(),old=limits.get(key);const value=!old||old.until<now?{n:0,until:now+period}:old;value.n++;limits.set(key,value);return value.n<=max;};
@@ -33,7 +40,9 @@ export async function createGameHost({definitions,store,publicOrigin,clock=Date.
   if(!definition||!validId(saved.id)||clock()-saved.updatedAt>86400000)continue;
   try{const room={...saved,definition,party:new RoomParty({definition,clock,saved:saved.party})};for(const member of Object.values(room.members)){const player=room.party.players.find(p=>p.id===member.id);if(player)Object.assign(player,publicProfile(member.profile));}rooms.set(room.id,room);}catch(error){console.error('Room restore failed',saved.id,error.message);}
  }
- const origin=req=>publicOrigin||`http://${req.headers.host}`;
+ const origins=[publicOrigin,...allowedOrigins].filter(Boolean).map(value=>new URL(value).origin);
+ // Keep invitations on the visitor's recognised hostname during a domain migration.
+ const origin=req=>origins.find(value=>new URL(value).host===req.headers.host)||publicOrigin||`http://${req.headers.host}`;
  function permitted(req){return !req.headers.origin||req.headers.origin===origin(req);}
  const body=async req=>{let size=0,text='';for await(const chunk of req){size+=chunk.length;if(size>40000)throw Error('Request too large');text+=chunk;}return JSON.parse(text||'{}');};
  const server=http.createServer(async(req,res)=>{

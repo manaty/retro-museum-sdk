@@ -33,7 +33,7 @@ export function parsePackage(bytes){
  const allowed={'image/png':'png','image/jpeg':'jpg','audio/mpeg':'mp3','font/woff2':'woff2'};
  let assetBytes=0;
  for(const [path,asset] of Object.entries(pack.assets)){
-  if(!/^[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}$/.test(path)||path.split('/').some(x=>!x||x==='.'||x==='..')||!object(asset)||!allowed[asset.type]||!path.endsWith('.'+allowed[asset.type])||typeof asset.data!=='string'||!/^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$/.test(asset.data))throw new Error(`Invalid asset: ${path}`);
+  if(!/^[a-zA-Z0-9][a-zA-Z0-9_./-]{0,180}$/.test(path)||path.split('/').some(x=>!x||x==='.'||x==='..')||!object(asset)||!allowed[asset.type]||!path.endsWith('.'+allowed[asset.type])||typeof asset.data!=='string'||asset.data.length%4!==0||/[^A-Za-z0-9+/=]/.test(asset.data)||Buffer.from(asset.data,'base64').toString('base64')!==asset.data)throw new Error(`Invalid asset: ${path}`);
   assetBytes+=Buffer.byteLength(asset.data,'base64');
  }
  if(assetBytes>18*1024*1024)throw new Error('Assets exceed 18 MB.');

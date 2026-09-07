@@ -20,6 +20,7 @@
     "node": ">=22"
   },
   "bin": {
-    "retro-museum-create": "./create-game.js"
+    "retro-museum-create": "./create-game.js",
+    "retro-museum-validate": "./validate.js"
   }
 }

@@ -30,3 +30,13 @@ validatePackage checks manifest/assets, runtime creation at minimum and maximum 
 
 npm install
 npm test
+
+## Creator toolkit and GitHub Action
+
+Copy [examples/prevalidate.yml](examples/prevalidate.yml) into `.github/workflows/retro-museum.yml`. It runs on pushes and pull requests with read-only repository permissions. `uses: manaty/retro-museum-sdk@v1` accepts a `path` input and produces `status`, `sha256` and `report` outputs. For a reproducible supply chain, pin the Action to a full release commit SHA. Linux GitHub-hosted runners are supported.
+
+Commit your prebuilt package first. The Action installs only the SDK's locked dependencies with lifecycle scripts disabled, then runs the WASM validator in a separate, time-limited process. It never installs or executes your repository's build scripts. The report is stored in the runner's temporary directory; the example uploads it even after a failed check. Do not use `pull_request_target` to run untrusted pull-request code.
+
+For local development, clone this SDK, run `npm ci --ignore-scripts`, then `node create-game.js my-game`. Edit the generated files, run `node build.mjs` in your game directory and `node /path/to/retro-museum-sdk/validate.js /path/to/my-game` to prevalidate. No account or API key is needed.
+
+A passing Action is feedback for the author, **not marketplace approval**. The marketplace fetches a fixed source commit, independently validates the exact artifact and applies its versioned content policy and AI review. Changes require a new submission. See [marketplace policy](https://github.com/manaty/retro-museum-marketplace/blob/main/POLICY.md).

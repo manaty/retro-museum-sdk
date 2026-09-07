@@ -1,0 +1,19 @@
+name: Retro Museum
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  prevalidate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - uses: manaty/retro-museum-sdk@v1
+        id: museum
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        if: always()
+        with:
+          name: retro-museum-report
+          path: ${{ runner.temp }}/retro-museum-report.json

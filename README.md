@@ -6,7 +6,7 @@ Open-source game contract, bounded JavaScript runtime and automated compatibilit
 
 Create a public repository with retro-museum.json and a prebuilt dist/game.rmg.json. The reference implementation is [Werewolves](https://github.com/manaty/game-werewolf). No installation or build scripts from a submission are executed by the marketplace.
 
-The manifest declares schemaVersion 1, id, semantic version, localized title/description (English required), author, SPDX license, languages, players.min/max, durationMinutes, runtime quickjs-v1, entry dist/game.rmg.json, and an empty permissions array. See the starter directory.
+The manifest declares schemaVersion 1, id, semantic version, localized title/description (English required), author, SPDX license, languages, players.min/max, durationMinutes, runtime quickjs-v1, entry dist/game.rmg.json, and an empty permissions array. The creator CLI generates a working starter.
 
 The package contains the manifest, an IIFE engine bundle, a complete view HTML document, full licenseText, and an assets map of {type,data} where data is base64. Supported assets: PNG, JPEG, MP3 and WOFF2. Asset paths are relative to assets/ in the HTML.
 
@@ -28,8 +28,10 @@ validatePackage checks manifest/assets, runtime creation at minimum and maximum 
 
 ## Tests
 
-npm install
+```sh
+npm ci --ignore-scripts
 npm test
+```
 
 ## Creator toolkit and GitHub Action
 
@@ -38,5 +40,13 @@ Copy [examples/prevalidate.yml](examples/prevalidate.yml) into `.github/workflow
 Commit your prebuilt package first. The Action installs only the SDK's locked dependencies with lifecycle scripts disabled, then runs the WASM validator in a separate, time-limited process. It never installs or executes your repository's build scripts. The report is stored in the runner's temporary directory; the example uploads it even after a failed check. Do not use `pull_request_target` to run untrusted pull-request code.
 
 For local development, clone this SDK, run `npm ci --ignore-scripts`, then `node create-game.js my-game`. Edit the generated files, run `node build.mjs` in your game directory and `node /path/to/retro-museum-sdk/validate.js /path/to/my-game` to prevalidate. No account or API key is needed.
+
+```sh
+git clone https://github.com/manaty/retro-museum-sdk.git
+cd retro-museum-sdk
+npm ci --ignore-scripts
+node create-game.js my-game
+node validate.js my-game
+```
 
 A passing Action is feedback for the author, **not marketplace approval**. The marketplace fetches a fixed source commit, independently validates the exact artifact and applies its versioned content policy and AI review. Changes require a new submission. See [marketplace policy](https://github.com/manaty/retro-museum-marketplace/blob/main/POLICY.md).

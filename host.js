@@ -20,14 +20,17 @@ export async function loadGame(path,{createEngine}={}){const bytes=await readFil
 export function fileRoomStore(directory){return {async list(){await mkdir(directory,{recursive:true});const result=[];for(const name of await readdir(directory)){if(!/^[a-z0-9]{12}\.json$/.test(name))continue;try{result.push(JSON.parse(await readFile(resolve(directory,name),'utf8')));}catch{}}return result;},async put(room){await mkdir(directory,{recursive:true});const path=resolve(directory,room.id+'.json');await writeFile(path+'.tmp',JSON.stringify(room),{mode:0o600});await rename(path+'.tmp',path);}};}
 
 export async function createGameHost({definitions,store,publicOrigin,clock=Date.now,maxRooms=32}={}){
- const games=new Map(definitions.map(d=>[d.pack.manifest.id,d])),rooms=new Map(),clients=new Map(),avatars=new Map(),limits=new Map();let closing=false;
+ const games=new Map(definitions.map(d=>[d.pack.manifest.id,d])),packages=new Map(definitions.map(d=>[d.hash,d])),rooms=new Map(),clients=new Map(),avatars=new Map(),limits=new Map();let closing=false;
  const json=(res,status,value)=>{res.writeHead(status,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'no-store'});res.end(JSON.stringify(value));};
  const rate=(key,max=30,period=60000)=>{const now=clock(),old=limits.get(key);const value=!old||old.until<now?{n:0,until:now+period}:old;value.n++;limits.set(key,value);return value.n<=max;};
  const serialize=room=>({id:room.id,game:room.game,packageHash:room.definition.hash,hostHash:room.hostHash,members:room.members,language:room.language,updatedAt:room.updatedAt,party:room.party.save()});
  const persist=room=>{room.saving=(room.saving||Promise.resolve()).catch(()=>{}).then(()=>store?.put(serialize(room)));return room.saving;};
  function publicProfile(value){const p=validateProfile(value);if(!p.avatar)return p;const id=hash(p.avatar);avatars.set(id,Buffer.from(p.avatar.split(',')[1],'base64'));return {...p,avatar:'/avatars/'+id+'.jpg'};}
+ if(store?.putPackage)await Promise.all(definitions.map(d=>store.putPackage(d.hash,d.pack)));
  if(store)for(const saved of await store.list()){
-  const definition=games.get(saved.game);if(!definition||definition.hash!==saved.packageHash||!validId(saved.id)||clock()-saved.updatedAt>86400000)continue;
+  let definition=packages.get(saved.packageHash);const current=games.get(saved.game);
+  if(!definition&&current&&store.getPackage){try{const pack=await store.getPackage(saved.packageHash);const bytes=JSON.stringify(pack);if(digest(bytes)!==saved.packageHash)throw Error('Package integrity mismatch');definition={pack:parsePackage(bytes,{allowNative:Boolean(current.createEngine)}),hash:saved.packageHash,createEngine:current.createEngine};packages.set(definition.hash,definition);}catch(error){console.error('Pinned package restore failed',saved.id,error.message);}}
+  if(!definition||!validId(saved.id)||clock()-saved.updatedAt>86400000)continue;
   try{const room={...saved,definition,party:new RoomParty({definition,clock,saved:saved.party})};for(const member of Object.values(room.members)){const player=room.party.players.find(p=>p.id===member.id);if(player)Object.assign(player,publicProfile(member.profile));}rooms.set(room.id,room);}catch(error){console.error('Room restore failed',saved.id,error.message);}
  }
  const origin=req=>publicOrigin||`http://${req.headers.host}`;
@@ -73,7 +76,7 @@ export async function createGameHost({definitions,store,publicOrigin,clock=Date.
     return json(res,405,{error:'Method not allowed'});
    }
    const packPath=/^\/packages\/([a-f0-9]{64})\/(view|assets\/(.+))$/.exec(path);
-   if(packPath){const definition=definitions.find(d=>d.hash===packPath[1]);if(!definition)return json(res,404,{error:'Unknown version'});
+   if(packPath){const definition=packages.get(packPath[1]);if(!definition)return json(res,404,{error:'Unknown version'});
     res.setHeader('Cache-Control','public,max-age=31536000,immutable');
     if(packPath[2]==='view'){
      const csp="sandbox allow-scripts allow-modals; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'";

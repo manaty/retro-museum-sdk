@@ -57,3 +57,12 @@ test('legacy abandoned rooms are deleted from disk during startup and cannot rea
 test('concurrent room creation cannot exceed capacity after reading request bodies',async()=>{
  const r=await rig();try{const responses=await Promise.all(Array.from({length:4},()=>r.request('/api/rooms',{game:'idle-test'})));assert.deepEqual(responses.map(x=>x.status).sort(),[201,503,503,503]);}finally{await r.close();}
 });
+test('expiration deletes after pending saves and shutdown waits for the deletion',async()=>{
+ const store=memory(),r=await rig({store});const room=await r.create();
+ let release;const gate=new Promise(resolve=>{release=resolve;});const put=store.put;
+ store.put=async data=>{await gate;await put(data);};
+ r.set(130000);await r.health();const old=r.host.rooms.get(room.id);
+ r.set(700000);await r.health();assert.equal(r.host.rooms.size,0);
+ let closed=false;const closing=r.close().then(()=>{closed=true;});await pause();assert.equal(closed,false);
+ release();await closing;await old.saving;assert.equal(store.data.has(room.id),false);
+});

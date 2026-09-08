@@ -31,6 +31,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
  if(!Number.isInteger(playerCapacity)||playerCapacity<1||playerCapacity>1000)throw Error('Invalid host player capacity');for(const d of definitions)d.playerCapacity=playerCapacity;
  const games=new Map(definitions.map(d=>[d.pack.manifest.id,d])),packages=new Map(definitions.map(d=>[d.hash,d])),rooms=new Map(),clients=new Map(),avatars=new Map(),limits=new Map();let closing=false;
  const EMPTY_RELEASE_MS=30000,EMPTY_RETENTION_MS=600000;
+ const pendingDeletes=new Set();
  const activeCount=()=>[...rooms.values()].filter(room=>room.party).length;
  const connectedPlayers=room=>[...clients.values()].filter(c=>c.room===room&&c.role==='controller').length;
  const pruneAvatars=()=>{const used=new Set();for(const room of rooms.values())for(const member of Object.values(room.members))if(member.profile?.avatar)used.add(hash(member.profile.avatar));for(const id of avatars.keys())if(!used.has(id))avatars.delete(id);};
@@ -49,7 +50,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
  function expire(room){
   room.expired=true;rooms.delete(room.id);room.party?.dispose();room.party=null;room.savedParty=null;pruneAvatars();
   for(const [ws,c] of clients)if(c.room===room){clients.delete(ws);send(ws,{type:'roomExpired'});ws.close(4004,'Room expired');}
-  room.saving=(room.saving||Promise.resolve()).catch(()=>{}).then(()=>store?.delete?.(room.id));room.saving.catch(console.error);
+  room.saving=(room.saving||Promise.resolve()).catch(()=>{}).then(()=>store?.delete?.(room.id));pendingDeletes.add(room.saving);room.saving.then(()=>pendingDeletes.delete(room.saving),error=>{pendingDeletes.delete(room.saving);console.error(error);});
  }
  function maintainRooms(){
   for(const room of rooms.values()){
@@ -176,6 +177,6 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
  return {server,rooms,
  async registerGame(definition){if(closing)throw Error('Host is closing');const source=definition.source||JSON.stringify(definition.pack);if(digest(source)!==definition.hash)throw Error('Package integrity mismatch');const pack=parsePackage(source,{allowNative:Boolean(definition.createEngine)});await store?.putPackage?.(definition.hash,source);const pinned={...definition,playerCapacity,pack,source};packages.set(pinned.hash,pinned);games.set(pack.manifest.id,pinned);prunePackages();},
  removeGame(id){games.delete(id);prunePackages();},
- async close(){closing=true;clearInterval(ticker);clearInterval(heartbeat);clearInterval(checkpoints);for(const ws of wss.clients)ws.terminate();await new Promise(resolve=>wss.close(resolve));await Promise.all([...rooms.values()].map(persist));for(const room of rooms.values())room.party?.dispose();await new Promise(resolve=>server.close(resolve));}};
+ async close(){closing=true;clearInterval(ticker);clearInterval(heartbeat);clearInterval(checkpoints);for(const ws of wss.clients)ws.terminate();await new Promise(resolve=>wss.close(resolve));await Promise.all([...rooms.values()].map(persist));await Promise.allSettled([...pendingDeletes]);for(const room of rooms.values())room.party?.dispose();await new Promise(resolve=>server.close(resolve));}};
 }
 function safeMessageId(bytes){try{const id=JSON.parse(bytes.toString()).id;return typeof id==='string'?id.slice(0,100):undefined;}catch{return undefined;}}

@@ -95,7 +95,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
     const asset=definition.pack.assets[packPath[3]];if(!asset)return json(res,404,{error:'Unknown asset'});res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Content-Type',asset.type);return res.end(Buffer.from(asset.data,'base64'));
    }
    const avatar=/^\/avatars\/([a-f0-9]{64})\.jpg$/.exec(path);if(avatar){if(!avatars.has(avatar[1]))return json(res,404,{error:'Unknown avatar'});res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'public,max-age=31536000,immutable'});return res.end(avatars.get(avatar[1]));}
-   const staticFile={'/host.js':'host-client.js','/host.css':'host.css','/compat.js':'host-compat.js'}[path];
+   const staticFile={'/host.js':'host-client.js','/host.css':'host.css','/compat.js':'host-compat.js','/personal-screen.css':'personal-screen.css'}[path];
    if(staticFile){const ext=path.slice(path.lastIndexOf('.'));res.writeHead(200,{'Content-Type':mime[ext],'Cache-Control':'no-cache'});return res.end(await readFile(resolve(here,'web',staticFile)));}
    if(req.method==='GET'&&(path==='/'||/^\/(g\/[a-z0-9-]+|[rj]\/[a-z0-9]{12})$/.test(path))){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});return res.end(await readFile(resolve(here,'web/index.html')));}
    return json(res,404,{error:'Not found'});

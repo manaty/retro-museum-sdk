@@ -46,8 +46,13 @@ test('public rooms isolate controller credentials, private snapshots and host ac
  const p=await(await post(path+'/join',{profile:{name:'Alice'}})).json(),q=await(await post(path+'/join',{profile:{name:'Bob'}})).json();
  assert.equal((await post('/api/rooms/'+b.id+'/join',{token:p.token})).status,401);assert.equal((await post(path+'/control',{action:'start'},p.token)).status,403);
  const phone=await connect(a.id,'controller',p.token);await connect(a.id,'controller',q.token);const display=await connect(a.id,'display');
+ const personalDisplay=await connect(a.id,'display');
+ assert.equal(host.rooms.get(a.id).party.players.length,2,'a personal display never consumes a player seat');
  assert.equal((await post(path+'/control',{action:'start'},a.hostToken)).status,200);
  await new Promise(r=>setTimeout(r,200));assert.equal(display.states.at(-1).party.community.private,undefined);assert.equal(phone.states.at(-1).party.community.private.card,p.playerId);
+ assert.equal(personalDisplay.states.at(-1).party.community.private,undefined);
+ personalDisplay.ws.close();await new Promise(r=>setTimeout(r,60));
+ assert.equal(host.rooms.get(a.id).party.players.find(x=>x.id===p.playerId).connected,true,'hiding the personal display keeps the player connected');
  assert.equal((await post(path+'/join',{token:p.token})).status,200);assert.equal(Object.keys(host.rooms.get(a.id).members).length,2);
  await host.close();host=await createGameHost({definitions:[definition],store});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));origin='http://127.0.0.1:'+host.server.address().port;
  assert.equal(host.rooms.get(a.id).party.phase,'paused');assert.equal((await post(path+'/join',{token:p.token})).status,200);assert.equal((await post(path+'/control',{action:'end'},a.hostToken)).status,200);

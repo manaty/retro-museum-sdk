@@ -26,3 +26,8 @@ An explicitly configured first-party native engine can be loaded with `loadGame(
 ## Browser transport
 
 The view emits `ready`, then receives `{ retroMuseum: 1, type: 'state', role, state, online, preferences }`. `state.party.community` is the game's own snapshot. Actions use `{ retroMuseum: 1, type: 'action', id, action, value }` and receive an `ack` or `error` with the same id. Only allowlisted audio preferences can be persisted by the parent. Profile cropping, credentials and the invitation QR belong to the host; a game should not implement its own pairing URL.
+
+## Playing remotely on one device
+
+Players can toggle **Screen + controls** on their join page. Portrait places the public game view above the personal controls; landscape puts them side by side. The choice is remembered locally, and a join link can specify `?view=combined` or `?view=controller`. The public view opens a read-only display connection, never a second player seat, and receives no private cards or roles. Hiding it keeps the controller session and inputs intact. Personal display audio starts muted to avoid duplicate effects and has separate preferences from a shared TV.
+

@@ -18,7 +18,7 @@ export class RoomParty {
   let player=this.players.find(p=>p.id===id);
   if(!player){if(this.players.length>=(this.definition.pack.manifest.players.max===null?this.maxPlayers:32))throw Error('partyFull');player={id,number:this.players.length+1,color:['#64ddff','#ff7286','#ffd166','#b79bff','#71e5a4','#ffab66','#f293ef'][this.players.length%7],spectator:this.phase!=='ready'||this.players.filter(p=>!p.spectator).length>=this.maxPlayers};this.players.push(player);}
   Object.assign(player,profile,{connected:true});this.disconnects.delete(id);
-  if(this.phase==='paused'&&['playerDisconnected','serverRestart'].includes(this.reason)&&this.canResume)this.admin('resume');
+  if(this.phase==='paused'&&['playerDisconnected','serverRestart','roomEmpty'].includes(this.reason)&&this.canResume)this.admin('resume');
   return player;
  }
  leave(id){const p=this.players.find(p=>p.id===id);if(!p)return;p.connected=false;this.engine?.release(id);if(this.required.includes(id)&&['playing','intro'].includes(this.phase))this.disconnects.set(id,this.clock()+20000);}

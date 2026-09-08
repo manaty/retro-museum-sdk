@@ -73,3 +73,13 @@ An optional package `data` object carries read-only lookup tables for large offl
 The isolated engine calls `__dataLookup(table, key)` and receives a string or `null`. It can read only data included in its own package. No file paths, network calls, mutable data or host objects are exposed. Tables are validated and decoded once per loaded package, outside the VM; individual lookups use bounded binary search. A native adapter can import `prepareData` from `@manaty/retro-museum-sdk/data` for identical results. Packages using this feature require SDK 1.5+ on their host.
 
 Data must include its source and licence in the repository and the package licence text. The offline table channel does not replace technical and editorial marketplace review.
+
+## Shared room lifetime (SDK 1.6)
+
+A room releases its active slot and game engine 30 seconds after its last authenticated controller disconnects. An open display, organiser page, QR poll or HTTP join request does not keep a slot occupied. New empty rooms use the same grace period.
+
+The saved match, credentials, profiles and original game version remain resumable for **10 minutes from the last controller disconnect**, including the initial 30 seconds. A returning controller reclaims an available slot and restores its match; if capacity is full, it can retry without extending the deadline. At expiry the room record is deleted, display connections close and clients show a translated expiration message. Browser-stored player profiles are unchanged.
+
+Restarts preserve the absence deadline; a connected room gets a reconnection grace period after a server restart. Legacy abandoned rooms older than ten minutes are discarded on startup. Custom persistent stores must implement asynchronous `delete(roomId)` in addition to `list`, `put`, `putPackage` and `getPackage` to physically remove expired room records.
+
+`GET /health` reports active `rooms`, dormant `savedRooms`, `connectedPlayers` and `playingRooms` separately. Saved rooms do not consume `maxRooms`. This policy applies to shared standalone rooms; museum stations use their own visit lifecycle. Dedicated paid rooms are a future product, not implemented by this policy.

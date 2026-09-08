@@ -7,7 +7,7 @@ export class CommunityParty {
   if(saved){for(const k of ['id','players','phase','remainingMs','startedAt','reason','options'])if(saved[k]!==undefined)this[k]=structuredClone(saved[k]);this.players.forEach(p=>p.connected=false);if(saved.engine)this.engine=new GameRuntime(definition.pack,this.players,saved.engine,this.options);if(['playing','intro'].includes(this.phase)){this.phase='paused';this.reason='serverRestart';}}
  }
  get minPlayers(){return this.definition.pack.manifest.players.min;}
- get maxPlayers(){return this.definition.pack.manifest.players.max;}
+ get maxPlayers(){return this.definition.pack.manifest.players.max??this.definition.playerCapacity??128;}
  get canStart(){return this.players.filter(p=>p.connected).length>=this.minPlayers;}
  get required(){return this.engine?.metadata?.requiredPlayers||[];}
  get canResume(){return Boolean(this.engine)&&this.required.every(id=>this.players.some(p=>p.id===id&&p.connected));}

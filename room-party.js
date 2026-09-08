@@ -10,20 +10,20 @@ export class RoomParty {
  }
  createEngine(players,saved){const options={...this.options,language:this.language||'en'};return this.definition.createEngine?this.definition.createEngine(players,saved,options):new GameRuntime(this.definition.pack,players,saved,options);}
  get minPlayers(){return this.definition.pack.manifest.players.min;}
- get maxPlayers(){return this.definition.pack.manifest.players.max;}
+ get maxPlayers(){return this.definition.pack.manifest.players.max??this.definition.playerCapacity??128;}
  get required(){return this.engine?.metadata?.requiredPlayers||[];}
  get canStart(){return this.players.filter(p=>p.connected).length>=this.minPlayers;}
  get canResume(){return Boolean(this.engine)&&!this.failed&&this.required.every(id=>this.players.some(p=>p.id===id&&p.connected));}
  join(id,profile={}){
   let player=this.players.find(p=>p.id===id);
-  if(!player){if(this.players.length>=32)throw Error('partyFull');player={id,number:this.players.length+1,color:['#64ddff','#ff7286','#ffd166','#b79bff','#71e5a4','#ffab66','#f293ef'][this.players.length%7],spectator:this.phase!=='ready'||this.players.filter(p=>!p.spectator).length>=this.maxPlayers};this.players.push(player);}
+  if(!player){if(this.players.length>=(this.definition.pack.manifest.players.max===null?this.maxPlayers:32))throw Error('partyFull');player={id,number:this.players.length+1,color:['#64ddff','#ff7286','#ffd166','#b79bff','#71e5a4','#ffab66','#f293ef'][this.players.length%7],spectator:this.phase!=='ready'||this.players.filter(p=>!p.spectator).length>=this.maxPlayers};this.players.push(player);}
   Object.assign(player,profile,{connected:true});this.disconnects.delete(id);
   if(this.phase==='paused'&&['playerDisconnected','serverRestart'].includes(this.reason)&&this.canResume)this.admin('resume');
   return player;
  }
  leave(id){const p=this.players.find(p=>p.id===id);if(!p)return;p.connected=false;this.engine?.release(id);if(this.required.includes(id)&&['playing','intro'].includes(this.phase))this.disconnects.set(id,this.clock()+20000);}
  remaining(){return Math.max(0,this.remainingMs-(this.phase==='playing'?this.clock()-this.runningSince:0));}
- validateOptions(value={}){if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid options');const schema=this.definition.pack.manifest.options||{};for(const [key,item] of Object.entries(value))if(!schema[key]?.values?.includes(item))throw Error('Invalid option: '+key);return Object.fromEntries(Object.entries(schema).map(([key,item])=>[key,value[key]??item.default]));}
+ validateOptions(value={}){if(!value||typeof value!=='object'||Array.isArray(value))throw Error('Invalid options');const schema=this.definition.pack.manifest.options||{};for(const [key,item] of Object.entries(value))if(!(schema[key]?.type==='integer'?Number.isInteger(item)&&item>=schema[key].min&&item<=schema[key].max:schema[key]?.values?.includes(item)))throw Error('Invalid option: '+key);return Object.fromEntries(Object.entries(schema).map(([key,item])=>[key,value[key]??item.default]));}
  admin(action,options){
   if(action==='start'){
    if(this.phase!=='ready'||!this.canStart)throw Error('needPlayers');this.options=this.validateOptions(options);
@@ -56,7 +56,7 @@ export class RoomParty {
   try{this.engine.advance(Math.min(.1,Math.max(0,(now-this.lastTick)/1000)));this.lastTick=now;this.finish();if(this.remaining()<=0){this.engine.action(null,'hostTimeUp',{});this.finish();if(this.phase==='playing')this.admin('end');}}
   catch(error){this.remainingMs=this.remaining();this.phase='paused';this.reason='communityError';this.runningSince=null;this.failed=true;this.failure=String(error.message);}
  }
- snapshot(id){return {id:this.id,phase:this.phase,reason:this.reason,remainingMs:this.remaining(),introRemainingMs:this.phase==='intro'?Math.max(0,this.introEndsAt-this.clock()):0,players:this.players.map(p=>({...p})),you:id||null,minPlayers:this.minPlayers,maxPlayers:this.maxPlayers,canStart:this.canStart,canResume:this.canResume,canJoin:this.players.length<32,community:this.engine&&!this.failed?this.engine.snapshot(id):null,reconnectingPlayers:[...this.disconnects].map(([id,until])=>({id,remainingMs:Math.max(0,until-this.clock())})),options:this.options};}
+ snapshot(id){return {id:this.id,phase:this.phase,reason:this.reason,remainingMs:this.remaining(),introRemainingMs:this.phase==='intro'?Math.max(0,this.introEndsAt-this.clock()):0,players:this.players.map(p=>({...p})),you:id||null,minPlayers:this.minPlayers,maxPlayers:this.maxPlayers,canStart:this.canStart,canResume:this.canResume,canJoin:this.players.length<(this.definition.pack.manifest.players.max===null?this.maxPlayers:32),community:this.engine&&!this.failed?this.engine.snapshot(id):null,reconnectingPlayers:[...this.disconnects].map(([id,until])=>({id,remainingMs:Math.max(0,until-this.clock())})),options:this.options};}
  save(){return {id:this.id,players:this.players,phase:this.phase,reason:this.reason,options:this.options,language:this.language||'en',remainingMs:this.remaining(),engine:this.engine&&!this.failed?this.engine.save():null};}
  dispose(){this.engine?.dispose();this.engine=null;}
 }

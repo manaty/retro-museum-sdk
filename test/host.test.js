@@ -58,3 +58,8 @@ test('public rooms isolate controller credentials, private snapshots and host ac
  assert.equal(host.rooms.get(a.id).party.phase,'paused');assert.equal((await post(path+'/join',{token:p.token})).status,200);assert.equal((await post(path+'/control',{action:'end'},a.hostToken)).status,200);
  }finally{for(const ws of sockets)ws.terminate();await host.close();}
 });
+
+test('host-limited activities admit a classroom and integer options reject out-of-range input',()=>{
+ const def={...definition,playerCapacity:80,pack:{...definition.pack,manifest:{...definition.pack.manifest,players:{min:1,max:null},options:{questionCount:{type:'integer',min:1,max:100,default:10}}}}};
+ const party=new RoomParty({definition:def});try{for(let i=0;i<80;i++)party.join('p'+i);assert.equal(party.maxPlayers,80);assert.equal(party.snapshot().canJoin,false);assert.throws(()=>party.join('overflow'),/partyFull/);assert.equal(party.validateOptions({questionCount:73}).questionCount,73);assert.throws(()=>party.validateOptions({questionCount:101}));assert.throws(()=>party.validateOptions({questionCount:'10'}));}finally{party.dispose();}
+});

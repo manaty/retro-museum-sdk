@@ -5,7 +5,7 @@ import {GameRuntime} from './runtime.js';
 export function validatePackage(bytes){
  const checks=[],pack=parsePackage(bytes),start=performance.now();
  checks.push({name:'manifest-and-assets',passed:true});
- for(const count of [...new Set([pack.manifest.players.min,pack.manifest.players.max])]){
+ for(const count of [...new Set([pack.manifest.players.min,pack.manifest.players.max??128])]){
   const players=Array.from({length:count},(_,i)=>({id:`player-${i}`,number:i+1,color:['#abdf77','#ed9aca','#89c8fa','#ffbe69'][i%4]}));
   let game,restored;
   try{

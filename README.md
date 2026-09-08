@@ -60,3 +60,9 @@ Views may announce `{ retroMuseum: 1, type: 'ready', renderAck: true }` and answ
 Every standalone player screen includes **Invite a player**, translated into English, French and Tagalog. It opens the device's native share sheet when available, then falls back to copying or selecting the invitation URL. Cancelling a share does not copy anything. The payload contains the public join URL, never a player credential or organiser token. The museum can reuse this control through `@manaty/retro-museum-sdk/share`.
 
 Hosts can add approved immutable packages through `registerGame(definition)` and remove games from new-room listings through `removeGame(id)`. Existing rooms keep their original package, including after restart. `refreshGames` allows a host to resolve a newly published game when its direct URL is opened. Package registration is an operator-side API; no public route accepts arbitrary code or repository URLs.
+
+## Classroom-sized activities (1.4)
+
+A manifest may declare `players.max: null` for activities limited by host capacity instead of game rules. The standalone host defaults to 128 participants for these activities; operators can set `playerCapacity` (1–1000) when creating the host. This is a resource guard, not a measured Wi-Fi capacity. Other games retain their existing player and spectator limits. Compatibility validation exercises 1/minimum and 128 clients; it is not a network load test. Host-limited activity snapshots are delivered at most twice per second.
+
+Options may also use `{label:{en:"Questions"},type:"integer",min:1,max:100,default:10}`. The organiser sees an integer choice and the host rejects out-of-range or non-integer values. Engines must additionally validate content-dependent limits, such as how many questions exist in the selected questionnaire.

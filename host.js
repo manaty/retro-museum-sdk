@@ -95,7 +95,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
     const input=await body(req);if(!games.has(input.game))await refreshGames?.();const definition=games.get(input.game);if(!definition)return json(res,400,{error:'Unknown game'});
     maintainRooms();if(activeCount()>=maxRooms)return json(res,503,{error:'All rooms are busy. Please try again shortly.'});
     const id=randomBytes(6).toString('hex'),hostToken=token(),room={id,game:input.game,definition,hostHash:hash(hostToken),members:{},language:['en','fr','tl'].includes(input.language)?input.language:'en',updatedAt:clock(),emptySince:clock(),party:new RoomParty({definition,clock})};
-    rooms.set(id,room);await persist(room);return json(res,201,{id,hostToken,displayUrl:origin(req)+'/r/'+id,joinUrl:origin(req)+'/j/'+id});
+    room.party.language=room.language;if(input.options!==undefined||input.autoStartWhenFull!==undefined)room.party.configure(input);rooms.set(id,room);await persist(room);return json(res,201,{id,hostToken,displayUrl:origin(req)+'/r/'+id,joinUrl:origin(req)+'/j/'+id});
    }
    const api=/^\/api\/rooms\/([a-z0-9]{12})(?:\/(join|control|profile|qr))?$/.exec(path);
    if(api){
@@ -107,17 +107,17 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
      const input=await body(req);let credential=input.token,member=credential&&room.members[hash(credential)];
      if(credential&&!member)return json(res,401,{error:'Invalid player session'});
      if(!member){if(Object.keys(room.members).length>=(room.definition.pack.manifest.players.max===null?playerCapacity:32))return json(res,409,{error:'Room is full'});credential=token();member={id:randomBytes(16).toString('hex'),profile:validateProfile(input.profile||{name:'',avatar:null})};room.members[hash(credential)]=member;}
-     else if(input.profile)member.profile=validateProfile(input.profile);
+     else if(input.profile)member.profile=validateProfile({...input.profile,...(member.profile.chessElo===undefined?{}:{chessElo:member.profile.chessElo})});
      // Joining is completed by the authenticated socket so abandoned forms don't occupy seats.
-     room.updatedAt=clock();await persist(room);return json(res,200,{token:credential,playerId:member.id});
+     room.updatedAt=clock();await persist(room);return json(res,200,{token:credential,playerId:member.id,chessElo:member.profile.chessElo});
     }
     const bearer=req.headers.authorization?.replace(/^Bearer /,'');
     if(req.method==='POST'&&api[2]==='profile'){
-     const member=bearer&&room.members[hash(bearer)];if(!member)return json(res,401,{error:'Invalid player session'});member.profile=validateProfile(await body(req));const player=(room.party?.players||room.savedParty.players).find(p=>p.id===member.id);if(player)Object.assign(player,publicProfile(member.profile));await persist(room);return json(res,200,{ok:true});
+     const member=bearer&&room.members[hash(bearer)];if(!member)return json(res,401,{error:'Invalid player session'});member.profile=validateProfile({...await body(req),...(member.profile.chessElo===undefined?{}:{chessElo:member.profile.chessElo})});const player=(room.party?.players||room.savedParty.players).find(p=>p.id===member.id);if(player)Object.assign(player,publicProfile(member.profile));await persist(room);return json(res,200,{ok:true});
     }
     if(req.method==='POST'&&api[2]==='control'){
      if(!matches(bearer,room.hostHash))return json(res,403,{error:'Only the room organiser can do this.'});
-     const command=await body(req);if(!room.party)return json(res,409,{error:'A player must reconnect before this room can resume.'});room.party.language=room.language;if(command.action==='language'){if(!['en','fr','tl'].includes(command.value))throw Error('Invalid language');room.language=command.value;}else room.party.admin(command.action,command.options);
+     const command=await body(req);if(!room.party)return json(res,409,{error:'A player must reconnect before this room can resume.'});room.party.language=room.language;if(command.action==='language'){if(!['en','fr','tl'].includes(command.value))throw Error('Invalid language');room.language=command.value;}else if(command.action==='configure')room.party.configure(command);else room.party.admin(command.action,command.options);
     room.party.language=room.language;room.updatedAt=clock();await persist(room);return json(res,200,{ok:true});
     }
     return json(res,405,{error:'Method not allowed'});
@@ -147,7 +147,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
    const message=JSON.parse(bytes.toString());
    if(!client){if(message.type!=='hello'||!validId(message.room)||!['display','controller'].includes(message.role))throw Error('Invalid connection');maintainRooms();const room=rooms.get(message.room);if(!room){send(ws,{type:'roomExpired'});ws.close(4004,'Room expired');return;}
     const member=message.role==='controller'&&typeof message.token==='string'?room.members[hash(message.token)]:null;if(message.role==='controller'&&!member)throw Error('Invalid player session');
-    if(member){activate(room);room.party.join(member.id,publicProfile(member.profile));room.emptySince=null;}
+    if(member){activate(room);room.party.language=room.language;room.party.join(member.id,publicProfile(member.profile));room.emptySince=null;}
     client={room,role:message.role,id:member?.id,language:['en','fr','tl'].includes(message.language)?message.language:'en',lastSent:0,sequence:0,alive:true};clients.set(ws,client);clearTimeout(deadline);
     if(member){for(const [other,c] of clients)if(other!==ws&&c.room===room&&c.id===member.id){clients.delete(other);other.close(4003,'Opened on another tab');}}
     if(member){room.updatedAt=clock();persist(room)?.catch(console.error);}send(ws,{type:'welcome'});return;
@@ -164,7 +164,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
   ws.on('close',()=>{clearTimeout(deadline);if(!clients.has(ws))return;clients.delete(ws);if(client.id&&!Array.from(clients.values()).some(c=>c.room===client.room&&c.id===client.id))client.room.party?.leave(client.id);if(client.role==='controller'&&!connectedPlayers(client.room)&&client.room.emptySince===null)client.room.emptySince=clock();if(!closing)persist(client.room)?.catch(console.error);});
  });
  const ticker=setInterval(()=>{
-  maintainRooms();for(const room of rooms.values())room.party?.tick();const now=clock();
+  maintainRooms();for(const room of rooms.values()){room.party?.tick();if(room.game==='chess'&&room.party&&['solved','ended'].includes(room.party.phase))for(const member of Object.values(room.members)){const player=room.party.players.find(p=>p.id===member.id);if(player?.chessElo!==undefined)member.profile.chessElo=player.chessElo;}}const now=clock();
   for(const [ws,c] of clients){
    if(!c.room.party){if(now-c.lastSent>=1000){c.pending=null;c.ackAt=null;c.lastSent=now;send(ws,{type:'roomSleeping',expiresAt:c.room.emptySince+EMPTY_RETENTION_MS});}continue;}
    if(c.pending){if(now-c.ackAt>5000)ws.terminate();continue;}

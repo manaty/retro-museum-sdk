@@ -1,6 +1,6 @@
 {
   "name": "@manaty/retro-museum-sdk",
-  "version": "1.6.0",
+  "version": "1.7.0",
   "type": "module",
   "license": "MIT",
   "description": "Retro Museum game contract, isolated runtime and validation",

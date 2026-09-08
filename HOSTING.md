@@ -19,6 +19,12 @@ The host accepts up to 32 rooms by default and limits room creation, player enro
 
 ## Embedding
 
+## Automatic start and Chess ratings
+
+An activity can declare `autoStartWhenFull: true` in its manifest (default: false). This requires a finite `players.max`. Standalone organisers can override it and save game options before players arrive via `POST /api/rooms/:id/control` with `action: "configure"`, `autoStartWhenFull` and `options`. Only authenticated controller connections fill seats; displays, abandoned join forms and duplicate tabs do not. Automatic start only applies to the ready lobby, never to paused or finished games. The setting and options survive room restoration.
+
+Chess controllers ask for an initial local Elo (700 by default). The host validates the profile's optional `chessElo` integer (0–4000). Chess freezes starting ratings per match and publishes `ratings` in its final snapshot and metadata; the host carries these forward for rematches. The browser stores its own result atomically in `museum-chess-rating-v1` and remembers processed match IDs, so refreshes do not apply a result twice. This is an informal rating on the current browser/origin, not a verified federation rating or a cross-device account. Elo uses K=32; wins, losses and chess draws count, organiser cancellations and the host's overall activity deadline do not.
+
 `createGameHost({ definitions, store, publicOrigin })` creates the HTTP/WebSocket server without listening. `loadGame(path)` loads a validated package. A store implements `list()` and `put(room)`; checkpoint data contains private game state and must never be public.
 
 An explicitly configured first-party native engine can be loaded with `loadGame(path, { createEngine })`. This is used for the real ZX80 CPU, which needs its separately installed system ROM. A native manifest uses `native-v1`. The default package validator and marketplace continue to reject native engines: untrusted submissions cannot select or load arbitrary Node.js code.

@@ -9,6 +9,28 @@ import {join} from 'node:path';
 import http from 'node:http';
 import {RoomParty} from '../room-party.js';
 const definition={hash:'a'.repeat(64),pack:{manifest:{id:'test-game',version:'1.0.0',title:{en:'Test'},description:{en:'A test'},players:{min:2,max:4},durationMinutes:15,options:{}},engine:`globalThis.RetroMuseumGame={create(players,saved){let n=saved?.n||0;return {snapshot(id){return {n,...(id?{private:{card:id}}:{})}},save(){return {n}},advance(){},action(id,a){if(a!=='move')throw Error('invalid');n++},status(){return {winner:null,requiredPlayers:players.map(p=>p.id)}},release(){},addPlayer(){}}}}`,view:'<!doctype html><html><body>Test</body></html>',assets:{}}};
+test('automatic start counts distinct connected players, keeps options, and never restarts a paused or finished match',()=>{
+ const def={...definition,pack:{...definition.pack,manifest:{...definition.pack.manifest,players:{min:2,max:2},autoStartWhenFull:true,options:{minutes:{values:[3,5],default:5}}}}};
+ const party=new RoomParty({definition:def});try{
+ party.configure({options:{minutes:3},autoStartWhenFull:false});party.join('a');party.join('b');assert.equal(party.phase,'ready');
+ const restored=new RoomParty({definition:def,saved:party.save()});assert.equal(restored.autoStartWhenFull,false);restored.dispose();
+ party.leave('b');party.configure({autoStartWhenFull:true});party.join('a');assert.equal(party.phase,'ready');party.join('c');assert.equal(party.phase,'intro');assert.equal(party.options.minutes,3);assert.deepEqual(party.players.map(p=>p.id),['a','c']);
+ const engine=party.engine;party.join('a');assert.equal(party.engine,engine);party.admin('pause');party.join('c');assert.equal(party.phase,'paused');
+ assert.throws(()=>party.configure({autoStartWhenFull:false}),/already started/);party.admin('end');party.join('d');assert.equal(party.phase,'ended');
+ }finally{party.dispose();}
+});
+test('HTTP enrollment and read-only displays do not auto-start; the second authenticated controller does',async()=>{
+ const def={...definition,pack:{...definition.pack,manifest:{...definition.pack.manifest,players:{min:2,max:2},autoStartWhenFull:true}}};
+ const host=await createGameHost({definitions:[def]});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+host.server.address().port,sockets=[];
+ const post=async(path,data,token)=>fetch(base+path,{method:'POST',headers:{Authorization:'Bearer '+token},body:JSON.stringify(data)});
+ const connect=async(room,role,token)=>{const ws=new WebSocket(base.replace('http','ws')+'/socket');sockets.push(ws);await new Promise((resolve,reject)=>{ws.on('error',reject);ws.on('open',()=>ws.send(JSON.stringify({type:'hello',room,role,token})));ws.on('message',raw=>{const m=JSON.parse(raw);if(m.type==='welcome')resolve();if(m.type==='error')reject(Error(m.message));if(m.type==='state')ws.send(JSON.stringify({type:'ack',sequence:m.sequence}));});});};
+ try{const room=await(await post('/api/rooms',{game:'test-game'})).json(),party=host.rooms.get(room.id).party;
+ const a=await(await post('/api/rooms/'+room.id+'/join',{profile:{name:'a'}})).json(),b=await(await post('/api/rooms/'+room.id+'/join',{profile:{name:'b'}})).json();
+ await connect(room.id,'display');assert.equal(party.phase,'ready');await connect(room.id,'controller',a.token);await connect(room.id,'controller',a.token);assert.equal(party.phase,'ready');
+ assert.equal((await post('/api/rooms/'+room.id+'/control',{action:'configure',autoStartWhenFull:false},a.token)).status,403);
+ await connect(room.id,'controller',b.token);assert.equal(party.phase,'intro');assert.equal(party.players.length,2);
+ }finally{for(const ws of sockets)ws.terminate();await host.close();}
+});
 test('late arrivals join the next match; temporary disconnection gets a grace period; stale commands fail',()=>{
  let now=0;const party=new RoomParty({definition,clock:()=>now});try{
  party.join('a');party.join('b');party.admin('start');const old=party.id;now=3001;party.tick();party.join('c');assert.equal(party.players.find(p=>p.id==='c').spectator,true);assert.throws(()=>party.command('c',{matchId:old,id:'x',action:'move'}),/spectator/);

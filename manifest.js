@@ -25,7 +25,7 @@ export function manifest(value,{allowNative=false}={}){
  if(typeof value.author!=='string'||!value.author.trim()||value.author.length>100)throw new Error('Author is required.');
  if(value.introMs!==undefined&&(!Number.isInteger(value.introMs)||value.introMs<0||value.introMs>60000))throw new Error('Invalid introduction duration.');
  if(value.options!==undefined){
-  if(!object(value.options)||Object.keys(value.options).length>8)throw new Error('Invalid game options.');
+  if(!object(value.options)||Object.keys(value.options).length>12)throw new Error('Invalid game options.');
   for(const [key,option] of Object.entries(value.options)){
    if(!/^[a-zA-Z][a-zA-Z0-9]{0,39}$/.test(key)||!object(option)||!object(option.label)||typeof option.label.en!=='string'||Object.values(option.label).some(x=>typeof x!=='string'||x.length>100)||!(option.type==='integer'?Number.isInteger(option.min)&&Number.isInteger(option.max)&&option.min>=1&&option.max<=100&&option.min<=option.max&&Number.isInteger(option.default)&&option.default>=option.min&&option.default<=option.max:Array.isArray(option.values)&&option.values.length>0&&option.values.length<=10&&option.values.every(x=>typeof x==='string'&&x.length<=50||typeof x==='number'&&Number.isFinite(x)||typeof x==='boolean')&&option.values.includes(option.default)))throw new Error('Invalid game option: '+key);
   }

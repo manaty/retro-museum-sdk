@@ -1,6 +1,6 @@
 {
   "name": "@manaty/retro-museum-sdk",
-  "version": "1.4.0",
+  "version": "1.5.0",
   "type": "module",
   "license": "MIT",
   "description": "Retro Museum game contract, isolated runtime and validation",
@@ -13,7 +13,8 @@
     "./room-party": "./room-party.js",
     "./share": "./web/share.js",
     "./personal-screen": "./web/personal-screen.js",
-    "./personal-screen.css": "./web/personal-screen.css"
+    "./personal-screen.css": "./web/personal-screen.css",
+    "./data": "./data.js"
   },
   "scripts": {
     "test": "node --test test/*.test.js",

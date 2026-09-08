@@ -7,7 +7,7 @@ import {manifest} from './manifest.js';
 
 export function validateIsolated(file) {
  return new Promise((done,reject)=>{
-  const child=spawn(process.execPath,['--max-old-space-size=128',fileURLToPath(new URL('./validate-worker.js',import.meta.url)),resolve(file)],{env:{},windowsHide:true,stdio:['ignore','pipe','ignore']});
+  const child=spawn(process.execPath,['--max-old-space-size=256',fileURLToPath(new URL('./validate-worker.js',import.meta.url)),resolve(file)],{env:{},windowsHide:true,stdio:['ignore','pipe','ignore']});
   let output='',killed=false;
   const timer=setTimeout(()=>{killed=true;child.kill();},20000);
   child.stdout.on('data',chunk=>{output+=chunk;if(output.length>64000){killed=true;child.kill();}});

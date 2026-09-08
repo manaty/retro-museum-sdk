@@ -1,4 +1,5 @@
 import {createHash} from 'node:crypto';
+import {prepareData} from './data.js';
 export const MAX_PACKAGE_BYTES=24*1024*1024;
 export const digest=bytes=>createHash('sha256').update(bytes).digest('hex');
 const object=x=>x&&typeof x==='object'&&!Array.isArray(x);
@@ -44,5 +45,5 @@ export function parsePackage(bytes,options){
   assetBytes+=Buffer.byteLength(asset.data,'base64');
  }
  if(assetBytes>18*1024*1024)throw new Error('Assets exceed 18 MB.');
- return {...pack,manifest:m};
+ const result={...pack,manifest:m};prepareData(result);return result;
 }

@@ -1,14 +1,18 @@
 import {getQuickJS} from 'quickjs-emscripten';
 import {randomInt} from 'node:crypto';
+import {prepareData} from './data.js';
 const QuickJS=await getQuickJS();
 const METHODS=new Set(['action','advance','snapshot','save','release','addPlayer','status']);
 export class GameRuntime {
  constructor(pack,players=[],saved=null,options={}){
+  const lookup=prepareData(pack);
   this.pack=pack;this.runtime=QuickJS.newRuntime();this.runtime.setMemoryLimit(24*1024*1024);this.runtime.setMaxStackSize(512*1024);
   this.deadline=performance.now()+250;this.runtime.setInterruptHandler(()=>performance.now()>this.deadline);
   this.context=this.runtime.newContext();
   const random=this.context.newFunction('__randomInt',bound=>{const max=this.context.getNumber(bound);if(!Number.isInteger(max)||max<1||max>4294967296)throw new Error('Invalid random bound');return this.context.newNumber(randomInt(max));});
   this.context.setProp(this.context.global,'__randomInt',random);random.dispose();
+  const data=this.context.newFunction('__dataLookup',(table,key)=>{const value=lookup(this.context.getString(table),this.context.getString(key));return value===null?this.context.null:this.context.newString(value);});
+  this.context.setProp(this.context.global,'__dataLookup',data);data.dispose();
   try{
    this.evaluate(`globalThis.structuredClone=x=>JSON.parse(JSON.stringify(x));globalThis.crypto={getRandomValues(a){for(let i=0;i<a.length;i++)a[i]=__randomInt(4294967296);return a;}};\n${pack.engine}\nif(typeof RetroMuseumGame!=='object'||typeof RetroMuseumGame.create!=='function')throw Error('Missing RetroMuseumGame.create');globalThis.__game=RetroMuseumGame.create(${JSON.stringify(players)},${JSON.stringify(saved)},${JSON.stringify(options)});`);
    this.metadata=this.call('status');

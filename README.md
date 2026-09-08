@@ -66,3 +66,10 @@ Hosts can add approved immutable packages through `registerGame(definition)` and
 A manifest may declare `players.max: null` for activities limited by host capacity instead of game rules. The standalone host defaults to 128 participants for these activities; operators can set `playerCapacity` (1–1000) when creating the host. This is a resource guard, not a measured Wi-Fi capacity. Other games retain their existing player and spectator limits. Compatibility validation exercises 1/minimum and 128 clients; it is not a network load test. Host-limited activity snapshots are delivered at most twice per second.
 
 Options may also use `{label:{en:"Questions"},type:"integer",min:1,max:100,default:10}`. The organiser sees an integer choice and the host rejects out-of-range or non-integer values. Engines must additionally validate content-dependent limits, such as how many questions exist in the selected questionnaire.
+# Offline lookup tables (SDK 1.5)
+
+An optional package `data` object carries read-only lookup tables for large offline vocabularies. Each table is `{ "encoding": "gzip-base64", "data": "…" }`. Decoded UTF-8 consists of sorted, unique `key\tvalue` rows separated by newlines. Table names contain lowercase ASCII letters, digits or hyphens; keys accept those characters and `ñ`, at most 80 characters. Values are at most 1,000 characters. Up to 32 tables share a 64 MiB decoded limit and remain inside the existing 24 MiB complete-package limit.
+
+The isolated engine calls `__dataLookup(table, key)` and receives a string or `null`. It can read only data included in its own package. No file paths, network calls, mutable data or host objects are exposed. Tables are validated and decoded once per loaded package, outside the VM; individual lookups use bounded binary search. A native adapter can import `prepareData` from `@manaty/retro-museum-sdk/data` for identical results. Packages using this feature require SDK 1.5+ on their host.
+
+Data must include its source and licence in the repository and the package licence text. The offline table channel does not replace technical and editorial marketplace review.

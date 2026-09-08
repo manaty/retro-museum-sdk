@@ -14,7 +14,7 @@ The package contains the manifest, an IIFE engine bundle, a complete view HTML d
 
 The bundle defines globalThis.RetroMuseumGame.create(players, saved, options). It returns an object with action(playerId, action, value), advance(seconds), snapshot(playerIdOrNull), save(), release(playerIdOrNull), addPlayer(player), and status().
 
-status returns {winner: string|null, requiredPlayers: string[]}. snapshot(null) is public; snapshot(id) contains only that player's secrets. save must be JSON-serializable and recreate the same public and private views. Late-player policy is controlled by the engine. No host filesystem, process, networking or module loader is exposed. Cryptographic randomness and a JSON structuredClone helper are available.
+status returns {winner: string|null, ended: boolean, requiredPlayers: string[]}. Set ended to true for **every** completed match, including draws and zero-score outcomes where winner is null. Release requiredPlayers at completion. An internal phase named "ended" is not sufficient: the host reads status(). Test this on the compiled package, then verify host replay creates a fresh match. snapshot(null) is public; snapshot(id) contains only that player's secrets. save must be JSON-serializable and recreate the same public and private views. Late-player policy is controlled by the engine. No host filesystem, process, networking or module loader is exposed. Cryptographic randomness and a JSON structuredClone helper are available.
 
 ## View API
 
@@ -25,6 +25,8 @@ The UI may use local packaged assets and browser audio. External network, cookie
 ## Validation
 
 validatePackage checks manifest/assets, runtime creation at minimum and maximum player counts, public/private save restoration, 120 ticks, late arrival and release. Reports identify precisely these checks; passing is not proof that every game rule or browser is correct. Each version is pinned by SHA-256. Updating the author repository never silently updates an installed game.
+
+Read the [game acceptance checklist](GAME-QUALITY.md) before submitting; it includes required gameplay, privacy, device and release evidence.
 
 ## Tests
 

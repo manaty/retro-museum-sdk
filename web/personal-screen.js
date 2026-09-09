@@ -13,7 +13,7 @@ export function personalScreenEnabled(storage,search=''){
 
 // The personal display uses the existing read-only display connection. It never
 // joins another player or receives the controller's private snapshot or token.
-export function createPersonalScreen({toolbar,language,protocol,hello,project=s=>s,source,onToggle=()=>{}}){
+export function createPersonalScreen({toolbar,language,protocol,hello,project=s=>s,source,socketPath='/socket',onToggle=()=>{}}){
  let enabled=personalScreenEnabled(localStorage,location.search),container,panel,frame,frameUrl,
   socket,retryTimer,watchdog,attempt=0,lastMessage=0,latest,previous,ready=false,inFlight=0,
   renderAck=false,renderId=0,lastSent,draw,online=false;
@@ -42,7 +42,7 @@ export function createPersonalScreen({toolbar,language,protocol,hello,project=s=
  }
  function open(){
   if(!enabled||!panel||socket&&socket.readyState<=1)return;
-  clearTimeout(retryTimer);const current=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+'/socket');socket=current;previous=null;lastMessage=Date.now();
+  clearTimeout(retryTimer);const current=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+socketPath);socket=current;previous=null;lastMessage=Date.now();
   current.onopen=()=>current.send(JSON.stringify({...hello(),type:'hello',role:'display',stream:2}));
   current.onmessage=event=>{if(socket!==current)return;lastMessage=Date.now();let m;try{m=JSON.parse(event.data);}catch{return;}
    if(m.type==='welcome'){online=true;attempt=0;status();}

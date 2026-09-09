@@ -27,7 +27,8 @@ export function fileRoomStore(directory){
  async delete(id){if(!validId(id))throw Error('Invalid room ID');try{await unlink(resolve(directory,id+'.json'));}catch(error){if(error.code!=='ENOENT')throw error;}} 
  };}
 
-export async function createGameHost({definitions,store,publicOrigin,allowedOrigins=[],refreshGames,clock=Date.now,maxRooms=32,playerCapacity=128}={}){
+export async function createGameHost({definitions,store,publicOrigin,allowedOrigins=[],basePath='',invitationOrigin,refreshGames,clock=Date.now,maxRooms=32,playerCapacity=128}={}){
+ if(basePath&&!/^\/[a-z][a-z0-9-]*$/.test(basePath))throw Error('Invalid host base path');
  if(!Number.isInteger(playerCapacity)||playerCapacity<1||playerCapacity>1000)throw Error('Invalid host player capacity');for(const d of definitions)d.playerCapacity=playerCapacity;
  const games=new Map(definitions.map(d=>[d.pack.manifest.id,d])),packages=new Map(definitions.map(d=>[d.hash,d])),rooms=new Map(),clients=new Map(),avatars=new Map(),limits=new Map();let closing=false;
  const EMPTY_RELEASE_MS=30000,EMPTY_RETENTION_MS=600000;
@@ -66,7 +67,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
   // Only a successfully authenticated controller cancels the absence deadline.
  }
 
- function publicProfile(value){const p=validateProfile(value);if(!p.avatar)return p;const id=hash(p.avatar);avatars.set(id,Buffer.from(p.avatar.split(',')[1],'base64'));return {...p,avatar:'/avatars/'+id+'.jpg'};}
+ function publicProfile(value){const p=validateProfile(value);if(!p.avatar)return p;const id=hash(p.avatar);avatars.set(id,Buffer.from(p.avatar.split(',')[1],'base64'));return {...p,avatar:basePath+'/avatars/'+id+'.jpg'};}
  if(store?.putPackage)await Promise.all(definitions.map(d=>store.putPackage(d.hash,d.source||JSON.stringify(d.pack))));
  if(store)for(const saved of await store.list()){
   if(!validId(saved.id))continue;
@@ -80,12 +81,13 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
  const origins=[publicOrigin,...allowedOrigins].filter(Boolean).map(value=>new URL(value).origin);
  // Keep invitations on the visitor's recognised hostname during a domain migration.
  const origin=req=>origins.find(value=>new URL(value).host===req.headers.host)||publicOrigin||`http://${req.headers.host}`;
+ const inviteOrigin=req=>invitationOrigin?new URL(invitationOrigin).origin:origin(req);
  function permitted(req){return !req.headers.origin||req.headers.origin===origin(req);}
  const body=async req=>{let size=0,text='';for await(const chunk of req){size+=chunk.length;if(size>40000)throw Error('Request too large');text+=chunk;}return JSON.parse(text||'{}');};
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   try{
-   const url=new URL(req.url,'http://host');const path=url.pathname;maintainRooms();
+   const url=new URL(req.url,'http://host');if(basePath&&url.pathname!==basePath&&!url.pathname.startsWith(basePath+'/'))return json(res,404,{error:'Not found'});const path=url.pathname.slice(basePath.length)||'/';maintainRooms();
    if(req.method==='POST'&&!permitted(req))return json(res,403,{error:'Invalid origin'});
    if(path==='/health')return json(res,200,{ok:true,rooms:activeCount(),savedRooms:rooms.size-activeCount(),connectedPlayers:[...clients.values()].filter(c=>c.role==='controller').length,playingRooms:[...rooms.values()].filter(r=>r.party&&['playing','intro'].includes(r.party.phase)).length,games:[...games.keys()]});
    if(path==='/api/games'){const requested=url.searchParams.get('game');if(requested&&!games.has(requested))await refreshGames?.();else Promise.resolve(refreshGames?.()).catch(()=>{});return json(res,200,[...games.values()].map(d=>({...d.pack.manifest,hash:d.hash})));}
@@ -95,13 +97,13 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
     const input=await body(req);if(!games.has(input.game))await refreshGames?.();const definition=games.get(input.game);if(!definition)return json(res,400,{error:'Unknown game'});
     maintainRooms();if(activeCount()>=maxRooms)return json(res,503,{error:'All rooms are busy. Please try again shortly.'});
     const id=randomBytes(6).toString('hex'),hostToken=token(),room={id,game:input.game,definition,hostHash:hash(hostToken),members:{},language:['en','fr','tl'].includes(input.language)?input.language:'en',updatedAt:clock(),emptySince:clock(),party:new RoomParty({definition,clock})};
-    room.party.language=room.language;if(input.options!==undefined||input.autoStartWhenFull!==undefined)room.party.configure(input);rooms.set(id,room);await persist(room);return json(res,201,{id,hostToken,displayUrl:origin(req)+'/r/'+id,joinUrl:origin(req)+'/j/'+id});
+    room.party.language=room.language;if(input.options!==undefined||input.autoStartWhenFull!==undefined)room.party.configure(input);rooms.set(id,room);await persist(room);return json(res,201,{id,hostToken,displayUrl:inviteOrigin(req)+basePath+'/r/'+id,joinUrl:inviteOrigin(req)+basePath+'/j/'+id});
    }
    const api=/^\/api\/rooms\/([a-z0-9]{12})(?:\/(join|control|profile|qr))?$/.exec(path);
    if(api){
     const room=rooms.get(api[1]);if(!room)return json(res,404,{error:'This room is no longer available. Create a new room.'});
-    if(req.method==='GET'&&!api[2])return json(res,200,{id:room.id,game:room.definition.pack.manifest,hash:room.definition.hash,language:room.language,joinUrl:origin(req)+'/j/'+room.id});
-    if(req.method==='GET'&&api[2]==='qr'){res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'private,max-age=60'});return res.end(await QRCode.toBuffer(origin(req)+'/j/'+room.id,{width:220,margin:2}));}
+    if(req.method==='GET'&&!api[2])return json(res,200,{id:room.id,game:room.definition.pack.manifest,hash:room.definition.hash,language:room.language,joinUrl:inviteOrigin(req)+basePath+'/j/'+room.id});
+    if(req.method==='GET'&&api[2]==='qr'){res.writeHead(200,{'Content-Type':'image/png','Cache-Control':'private,max-age=60'});return res.end(await QRCode.toBuffer(inviteOrigin(req)+basePath+'/j/'+room.id,{width:220,margin:2}));}
     if(req.method==='POST'&&api[2]==='join'){
      if(!rate('join:'+room.id+':'+req.socket.remoteAddress,room.definition.pack.manifest.players.max===null?playerCapacity*2:40))return json(res,429,{error:'Please wait and retry.'});
      const input=await body(req);let credential=input.token,member=credential&&room.members[hash(credential)];
@@ -134,12 +136,12 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
    const avatar=/^\/avatars\/([a-f0-9]{64})\.jpg$/.exec(path);if(avatar){if(!avatars.has(avatar[1]))return json(res,404,{error:'Unknown avatar'});res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'public,max-age=31536000,immutable'});return res.end(avatars.get(avatar[1]));}
    const staticFile={'/host.js':'host-client.js','/host.css':'host.css','/compat.js':'host-compat.js','/personal-screen.css':'personal-screen.css'}[path];
    if(staticFile){const ext=path.slice(path.lastIndexOf('.'));res.writeHead(200,{'Content-Type':mime[ext],'Cache-Control':'no-cache'});return res.end(await readFile(resolve(here,'web',staticFile)));}
-   if(req.method==='GET'&&(path==='/'||/^\/(g\/[a-z0-9-]+|[rj]\/[a-z0-9]{12})$/.test(path))){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});return res.end(await readFile(resolve(here,'web/index.html')));}
+   if(req.method==='GET'&&(path==='/'||/^\/(g\/[a-z0-9-]+|[rj]\/[a-z0-9]{12})$/.test(path))){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});const html=await readFile(resolve(here,'web/index.html'),'utf8');return res.end(html.replace('<head>','<head><meta name="museum-base" content="'+basePath+'">').replace(/(href|src)="\//g,'$1="'+basePath+'/'));}
    return json(res,404,{error:'Not found'});
   }catch(error){return json(res,400,{error:String(error.message).slice(0,180)});}
  });
  const wss=new WebSocketServer({noServer:true,maxPayload:40000});
- server.on('upgrade',(req,socket,head)=>{if(req.url!=='/socket'||!permitted(req)||clients.size>=1000){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));});
+ server.on('upgrade',(req,socket,head)=>{if(req.url!==basePath+'/socket'||!permitted(req)||clients.size>=1000){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));});
  const send=(ws,value)=>{if(ws.readyState===WebSocket.OPEN)ws.send(JSON.stringify(value));};
  wss.on('connection',(ws,req)=>{
   let client;const deadline=setTimeout(()=>{if(!client)ws.close(4001,'Authentication required');},7000);ws.on('error',()=>{});

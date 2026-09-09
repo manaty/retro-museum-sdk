@@ -9,6 +9,13 @@ import {join} from 'node:path';
 import http from 'node:http';
 import {RoomParty} from '../room-party.js';
 const definition={hash:'a'.repeat(64),pack:{manifest:{id:'test-game',version:'1.0.0',title:{en:'Test'},description:{en:'A test'},players:{min:2,max:4},durationMinutes:15,options:{}},engine:`globalThis.RetroMuseumGame={create(players,saved){let n=saved?.n||0;return {snapshot(id){return {n,...(id?{private:{card:id}}:{})}},save(){return {n}},advance(){},action(id,a){if(a!=='move')throw Error('invalid');n++},status(){return {winner:null,requiredPlayers:players.map(p=>p.id)}},release(){},addPlayer(){}}}}`,view:'<!doctype html><html><body>Test</body></html>',assets:{}}};
+test('mounted host keeps assets, sockets and LAN invitations under its own prefix',async()=>{
+ const host=await createGameHost({definitions:[definition],basePath:'/play',invitationOrigin:'http://192.168.1.10:4310'});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+host.server.address().port;let ws;
+ try{const html=await(await fetch(base+'/play/g/test-game')).text();assert.match(html,/content="\/play"/);assert.match(html,/src="\/play\/host.js"/);assert.equal((await fetch(base+'/api/games')).status,404);
+ const response=await fetch(base+'/play/api/rooms',{method:'POST',headers:{Origin:base},body:JSON.stringify({game:'test-game'})});assert.equal(response.status,201);const room=await response.json();assert.equal(room.joinUrl,'http://192.168.1.10:4310/play/j/'+room.id);assert.equal((await fetch(base+'/play/api/rooms/'+room.id+'/qr')).status,200);
+ ws=new WebSocket(base.replace('http','ws')+'/play/socket',{headers:{Origin:base}});await new Promise((resolve,reject)=>{ws.on('error',reject);ws.on('open',()=>ws.send(JSON.stringify({type:'hello',role:'display',room:room.id})));ws.on('message',raw=>{if(JSON.parse(raw).type==='welcome')resolve();});});
+ }finally{ws?.terminate();await host.close();}
+});
 test('automatic start counts distinct connected players, keeps options, and never restarts a paused or finished match',()=>{
  const def={...definition,pack:{...definition.pack,manifest:{...definition.pack.manifest,players:{min:2,max:2},autoStartWhenFull:true,options:{minutes:{values:[3,5],default:5}}}}};
  const party=new RoomParty({definition:def});try{

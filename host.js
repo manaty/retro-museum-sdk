@@ -1,3 +1,4 @@
+import{StateEncoder}from'./state-delta.js';
 import http from 'node:http';
 import {readFile,mkdir,writeFile,rename,readdir,unlink} from 'node:fs/promises';
 import {fileURLToPath} from 'node:url';
@@ -150,11 +151,12 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
    if(!client){if(message.type!=='hello'||!validId(message.room)||!['display','controller'].includes(message.role))throw Error('Invalid connection');maintainRooms();const room=rooms.get(message.room);if(!room){send(ws,{type:'roomExpired'});ws.close(4004,'Room expired');return;}
     const member=message.role==='controller'&&typeof message.token==='string'?room.members[hash(message.token)]:null;if(message.role==='controller'&&!member)throw Error('Invalid player session');
     if(member){activate(room);room.party.language=room.language;room.party.join(member.id,publicProfile(member.profile));room.emptySince=null;}
-    client={room,role:message.role,id:member?.id,language:['en','fr','tl'].includes(message.language)?message.language:'en',lastSent:0,sequence:0,alive:true};clients.set(ws,client);clearTimeout(deadline);
+    client={room,role:message.role,id:member?.id,language:['en','fr','tl'].includes(message.language)?message.language:'en',lastSent:0,sequence:0,alive:true,encoder:message.stateDeltas===1&&room.game==='serpents'?new StateEncoder:null};clients.set(ws,client);clearTimeout(deadline);
     if(member){for(const [other,c] of clients)if(other!==ws&&c.room===room&&c.id===member.id){clients.delete(other);other.close(4003,'Opened on another tab');}}
     if(member){room.updatedAt=clock();persist(room)?.catch(console.error);}send(ws,{type:'welcome'});return;
    }
-   if(message.type==='ack'){if(message.sequence===client.pending){client.pending=null;client.ackAt=null;}return;}
+   if(message.type==='resync'&&client.encoder){if(!rate('resync:'+client.id+':'+client.room.id,4,1000))return;client.encoder.reset();client.pending=null;client.ackAt=null;client.lastSent=-Infinity;return;}
+   if(message.type==='ack'){if(message.sequence===client.pending){client.encoder?.acknowledge(message.sequence);client.pending=null;client.ackAt=null;}return;}
    if(message.type==='language'){if(['en','fr','tl'].includes(message.value))client.language=message.value;return;}
    if(message.type!=='command'||client.role!=='controller'||typeof message.id!=='string'||message.id.length>100||!rate('command:'+client.id,160,1000))throw Error('Invalid command');
    if(message.action==='zxStart'&&client.room.game==='zx80'){client.room.party.language=client.room.language;client.room.party.admin('start');}
@@ -171,7 +173,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
    if(!c.room.party){if(now-c.lastSent>=1000){c.pending=null;c.ackAt=null;c.lastSent=now;send(ws,{type:'roomSleeping',expiresAt:c.room.emptySince+EMPTY_RETENTION_MS});}continue;}
    if(c.pending){if(now-c.ackAt>5000)ws.terminate();continue;}
    if(now-c.lastSent<(c.room.definition.pack.manifest.players.max===null?500:c.role==='display'?50:100)||ws.bufferedAmount>65536)continue;
-   try{const p=c.room.party.snapshot(c.id);const state={party:p,phase:p.phase,remainingMs:p.remainingMs,durationMs:c.room.definition.pack.manifest.durationMinutes*60000,introRemainingMs:p.introRemainingMs,language:c.role==='controller'?c.language:c.room.language,station:'1',room:'1',sessionId:p.id};c.sequence++;c.pending=c.sequence;c.ackAt=now;c.lastSent=now;send(ws,{type:'state',sequence:c.sequence,state});}catch(error){send(ws,{type:'error',message:'This game could not render its state.'});}
+   try{const p=c.room.party.snapshot(c.id);const state={party:p,phase:p.phase,remainingMs:p.remainingMs,durationMs:c.room.definition.pack.manifest.durationMinutes*60000,introRemainingMs:p.introRemainingMs,language:c.role==='controller'?c.language:c.room.language,station:'1',room:'1',sessionId:p.id};c.sequence++;c.pending=c.sequence;c.ackAt=now;c.lastSent=now;if(c.encoder){if(ws.readyState===WebSocket.OPEN)ws.send(c.encoder.encode(state,c.sequence));}else send(ws,{type:'state',sequence:c.sequence,state});}catch(error){send(ws,{type:'error',message:'This game could not render its state.'});}
   }
  },25);
  const heartbeat=setInterval(()=>{for(const [ws,c] of clients){if(!c.alive){ws.terminate();continue;}c.alive=false;ws.ping();}for(const [key,value] of limits)if(value.until<clock())limits.delete(key);},10000);

@@ -1,3 +1,5 @@
+import{StateDecoder}from'../state-delta.js';
+const stateDecoder=new StateDecoder;
 import {readRating,initialRating,applyRating,syncRating} from './chess-rating.js';
 import {createInviteButton} from './share.js';
 import {createPersonalScreen} from './personal-screen.js';
@@ -25,13 +27,13 @@ function roomSleeping(value){
  panel.textContent=tr('sleeping');for(const button of main.querySelectorAll('[data-control]'))button.disabled=true;
 }
 function roomExpired(){stopped=true;personalScreen?.dispose();iframe?.remove();iframe=null;state=null;connection.textContent=tr('expired');main.innerHTML='<section class="landing"><h1>'+tr('expired')+'</h1><a href="'+base+'/">'+tr('browse')+' ↗</a></section>';const inviteButton=document.querySelector('[data-invite-player]');if(inviteButton)inviteButton.disabled=true;}
-function connect(){if(stopped)return;inFlight=null;pendingFrame=null;socket=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+base+'/socket');const current=socket;
- current.onopen=()=>{current.send(JSON.stringify({type:'hello',room:room.id,role,token:credential,language:lang}));};
+function connect(){if(stopped)return;stateDecoder.reset();inFlight=null;pendingFrame=null;socket=new WebSocket((location.protocol==='https:'?'wss:':'ws:')+'//'+location.host+base+'/socket');const current=socket;
+ current.onopen=()=>{current.send(JSON.stringify({type:'hello',room:room.id,role,token:credential,language:lang,stateDeltas:1}));};
  current.onmessage=event=>{if(socket!==current)return;let m;try{m=JSON.parse(event.data);}catch{return;}
   if(m.type==='welcome'){retry=0;connection.textContent=tr('connected');}
   if(m.type==='roomSleeping'){roomSleeping(m);return;}
   if(m.type==='roomExpired'){roomExpired();return;}
-  if(m.type==='state'){roomSleeping(null);state=m.state;if(role==='controller'&&room.game.id==='chess')applyRating(localStorage,state);pendingFrame=m.sequence;schedule();}
+  if(m.type==='state'||m.type==='stateDelta'){try{state=stateDecoder.accept(m);}catch{stateDecoder.reset();inFlight=null;pendingFrame=null;current.send(JSON.stringify({type:'resync'}));return;}roomSleeping(null);if(role==='controller'&&room.game.id==='chess')applyRating(localStorage,state);pendingFrame=m.sequence;schedule();}
   if(m.type==='ack'||m.type==='error'){if(ready&&iframe)iframe.contentWindow.postMessage({retroMuseum:1,...m},'*');if(m.type==='error'&&!m.id)notice(m.code==='roomsBusy'?tr('roomsBusy'):m.message);}
  };
  current.onclose=event=>{if(socket!==current)return;if(event.code===4004||stopped){roomExpired();return;}connection.textContent=tr('reconnecting');sendFrame();if(event.code===4003){stopped=true;notice('This player is active in another tab.');return;}setTimeout(connect,Math.min(4000,250*2**retry++));};current.onerror=()=>{};

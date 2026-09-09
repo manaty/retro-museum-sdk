@@ -91,3 +91,9 @@ The saved match, credentials, profiles and original game version remain resumabl
 Restarts preserve the absence deadline; a connected room gets a reconnection grace period after a server restart. Legacy abandoned rooms older than ten minutes are discarded on startup. Custom persistent stores must implement asynchronous `delete(roomId)` in addition to `list`, `put`, `putPackage` and `getPackage` to physically remove expired room records.
 
 `GET /health` reports active `rooms`, dormant `savedRooms`, `connectedPlayers` and `playingRooms` separately. Saved rooms do not consume `maxRooms`. This policy applies to shared standalone rooms; museum stations use their own visit lifecycle. Dedicated paid rooms are a future product, not implemented by this policy.
+
+## Acknowledged state deltas (SDK 1.10)
+
+The browser host negotiates `stateDeltas: 1` in its socket hello. The initial rollout is limited to Serpents; other games and older clients retain full snapshots. Game frames still receive the same reconstructed state through `postMessage`, so the game rendering contract is unchanged. Controller updates remain capped at 10 Hz and displays at 20 Hz, with existing rendering acknowledgements and backpressure.
+
+Each socket owns its baseline, committed only after the matching state acknowledgement. Stable `id` arrays transmit additions, removals and changed fields. Serpents trajectory points use `[x,y,sequence]` and descending sequence order. Full snapshots are sent on connect, match changes, resynchronisation, or when a delta would not save at least 10%. A browser detecting a missing baseline requests `resync`. No credentials or private snapshots are shared across clients. `StateEncoder` and `StateDecoder` are exported through `@manaty/retro-museum-sdk/state-delta` for protocol testing.

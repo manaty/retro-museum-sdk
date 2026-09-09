@@ -18,6 +18,12 @@ status returns {winner: string|null, ended: boolean, requiredPlayers: string[]}.
 
 ## View API
 
+### Optional lobby choices (SDK 1.9)
+
+Declare `lobbyActions: ["chooseCharacter"]` for game-specific setup before the host starts. The standalone host creates a sandbox engine when the first participant arrives and calls `addPlayer` on subsequent arrivals. Repeated reconnects may call `addPlayer` again; it must be idempotent. Only the declared player actions are accepted in the ready phase. The engine must reserve teams/characters authoritatively and validate availability.
+
+At start the host calls `action(null, "hostStart", {...options, players: [connectedPlayerIds]})` on that existing engine. Apply the final options, remove absent participants, and begin the match. Client commands starting with `host` are forbidden. Lobby state is saved, and replay creates a fresh lobby with connected players, including previous spectators. Games without `lobbyActions` retain their existing lifecycle. This capability requires SDK 1.9 or newer on the host.
+
 The view runs in a sandboxed iframe with scripts enabled and an opaque origin. It sends parent.postMessage({retroMuseum:1,type:'ready'}, '*'). The host replies with {retroMuseum:1,type:'state',role:'display'|'controller',state,online}. The public or private game view is state.party.community. The host has already filtered it for this player. Commands are {retroMuseum:1,type:'action',action,value}. Validate event.source===parent on receipt. The host validates the iframe source and all player permissions on the server. Never request pairing tokens, administration credentials or another player's view.
 
 The UI may use local packaged assets and browser audio. External network, cookies, localStorage, top navigation and popups are unavailable. The host manages identities, avatars, QR codes, rooms, pause/replay and versions.

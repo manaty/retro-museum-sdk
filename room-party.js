@@ -13,12 +13,15 @@ export class RoomParty {
  get minPlayers(){return this.definition.pack.manifest.players.min;}
  get maxPlayers(){return this.definition.pack.manifest.players.max??this.definition.playerCapacity??128;}
  get required(){return this.engine?.metadata?.requiredPlayers||[];}
+ get hasLobby(){return Boolean(this.definition.pack.manifest.lobbyActions?.length);}
+ ensureLobby(){if(this.hasLobby&&this.phase==='ready'&&!this.engine&&this.players.some(p=>!p.spectator))this.engine=this.createEngine(this.players.filter(p=>!p.spectator),null);}
  get canStart(){return this.players.filter(p=>p.connected).length>=this.minPlayers;}
  get canResume(){return Boolean(this.engine)&&!this.failed&&this.required.every(id=>this.players.some(p=>p.id===id&&p.connected));}
  join(id,profile={}){
   let player=this.players.find(p=>p.id===id);
   if(!player){if(this.players.length>=(this.definition.pack.manifest.players.max===null?this.maxPlayers:32))throw Error('partyFull');player={id,number:this.players.length+1,color:['#64ddff','#ff7286','#ffd166','#b79bff','#71e5a4','#ffab66','#f293ef'][this.players.length%7],spectator:this.phase!=='ready'||this.players.filter(p=>!p.spectator).length>=this.maxPlayers};this.players.push(player);}
   Object.assign(player,profile,{connected:true});this.disconnects.delete(id);
+  if(this.hasLobby&&this.phase==='ready'&&!player.spectator){if(this.engine)this.engine.addPlayer(player);else this.ensureLobby();}
   if(this.phase==='paused'&&['playerDisconnected','serverRestart','roomEmpty'].includes(this.reason)&&this.canResume)this.admin('resume');
   this.maybeAutoStart();
   return player;
@@ -36,7 +39,7 @@ export class RoomParty {
   if(action==='start'){
    if(this.phase!=='ready'||!this.canStart)throw Error('needPlayers');this.options=this.validateOptions(options??this.options);
    this.players=this.players.filter(p=>p.connected).map((p,i)=>({...p,number:i+1,spectator:i>=this.maxPlayers}));
-   this.engine=this.createEngine(this.players.filter(p=>!p.spectator),null);this.phase='intro';this.introEndsAt=this.clock()+(this.definition.pack.manifest.introMs||3000);this.reason=null;
+   if(this.hasLobby){this.ensureLobby();this.engine.action(null,'hostStart',{...this.options,players:this.players.filter(p=>!p.spectator).map(p=>p.id)});}else this.engine=this.createEngine(this.players.filter(p=>!p.spectator),null);this.phase='intro';this.introEndsAt=this.clock()+(this.definition.pack.manifest.introMs||3000);this.reason=null;
   }else if(action==='pause'){
    if(!['intro','playing'].includes(this.phase))throw Error('noPartyToPause');this.remainingMs=this.remaining();this.phase='paused';this.runningSince=null;this.introEndsAt=null;this.reason='adminPause';this.engine?.release();
   }else if(action==='resume'){
@@ -45,13 +48,14 @@ export class RoomParty {
    this.remainingMs=this.remaining();this.phase='ended';this.runningSince=null;this.reason='adminEnded';this.engine?.release();
   }else if(action==='playAgain'){
    if(!['ended','solved'].includes(this.phase))throw Error('gameNotFinished');
-   this.engine?.dispose();this.engine=null;this.failed=false;this.id=randomUUID();this.phase='ready';this.reason=null;this.remainingMs=this.definition.pack.manifest.durationMinutes*60000;this.runningSince=null;this.introEndsAt=null;this.seen.clear();this.disconnects.clear();this.players=this.players.filter(p=>p.connected).map((p,i)=>({...p,number:i+1,spectator:i>=this.maxPlayers}));
+   this.engine?.dispose();this.engine=null;this.failed=false;this.id=randomUUID();this.phase='ready';this.reason=null;this.remainingMs=this.definition.pack.manifest.durationMinutes*60000;this.runningSince=null;this.introEndsAt=null;this.seen.clear();this.disconnects.clear();this.players=this.players.filter(p=>p.connected).map((p,i)=>({...p,number:i+1,spectator:i>=this.maxPlayers}));this.ensureLobby();
   }else throw Error('invalidGameAction');
  }
  command(id,message){
   if(message.matchId!==this.id)throw Error('oldMatch');const player=this.players.find(p=>p.id===id&&p.connected);if(!player||player.spectator)throw Error('spectator');
-  if(this.phase!=='playing'||this.failed)throw Error('gameNotPlaying');
-  if(message.action==='hostTimeUp')throw Error('invalidGameAction');
+  const lobby=this.phase==='ready'&&this.hasLobby&&this.definition.pack.manifest.lobbyActions.includes(message.action);
+  if((this.phase!=='playing'&&!lobby)||this.failed)throw Error('gameNotPlaying');
+  if(typeof message.action!=='string'||message.action.startsWith('host'))throw Error('invalidGameAction');
   const key=id+':'+message.id;if(this.seen.has(key))return {duplicate:true};
   this.engine.action(id,message.action,message.value);this.seen.add(key);if(this.seen.size>2000)this.seen.delete(this.seen.values().next().value);this.finish();return {duplicate:false};
  }

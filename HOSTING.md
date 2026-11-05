@@ -37,3 +37,15 @@ The view emits `ready`, then receives `{ retroMuseum: 1, type: 'state', role, st
 
 Players can toggle **Screen + controls** on their join page. Portrait places the public game view above the personal controls; landscape puts them side by side. The choice is remembered locally, and a join link can specify `?view=combined` or `?view=controller`. The public view opens a read-only display connection, never a second player seat, and receives no private cards or roles. Hiding it keeps the controller session and inputs intact. Personal display audio starts muted to avoid duplicate effects and has separate preferences from a shared TV.
 
+
+## Private data transfers
+
+`createGameHost({requestHandler})` can serve integration routes before the standard
+routes; return `true` only when the response is handled. POST origin checks run
+before this hook. Server code may call `host.createRoom(request, input, definition)`
+with a SHA-256-bound QuickJS package to create a room without adding a public
+catalog entry. The shared origin, rate and active-room limits still apply. The
+package is checkpointed with the room and restored by hash after restart.
+Only trusted server code supplies this definition; never pass an uploaded engine
+through this API without its own code-review boundary. The Tara integration uses
+only questionnaire data inside the host's pinned quiz engine.

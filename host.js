@@ -28,7 +28,7 @@ export function fileRoomStore(directory){
  async delete(id){if(!validId(id))throw Error('Invalid room ID');try{await unlink(resolve(directory,id+'.json'));}catch(error){if(error.code!=='ENOENT')throw error;}} 
  };}
 
-export async function createGameHost({definitions,store,publicOrigin,allowedOrigins=[],basePath='',invitationOrigin,refreshGames,clock=Date.now,maxRooms=32,playerCapacity=128}={}){
+export async function createGameHost({definitions,store,publicOrigin,allowedOrigins=[],basePath='',invitationOrigin,refreshGames,requestHandler,clock=Date.now,maxRooms=32,playerCapacity=128}={}){
  if(basePath&&!/^\/[a-z][a-z0-9-]*$/.test(basePath))throw Error('Invalid host base path');
  if(!Number.isInteger(playerCapacity)||playerCapacity<1||playerCapacity>1000)throw Error('Invalid host player capacity');for(const d of definitions)d.playerCapacity=playerCapacity;
  const games=new Map(definitions.map(d=>[d.pack.manifest.id,d])),packages=new Map(definitions.map(d=>[d.hash,d])),rooms=new Map(),clients=new Map(),avatars=new Map(),limits=new Map();let closing=false;
@@ -85,21 +85,41 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
  const inviteOrigin=req=>invitationOrigin?new URL(invitationOrigin).origin:origin(req);
  function permitted(req){return !req.headers.origin||req.headers.origin===origin(req);}
  const body=async req=>{let size=0,text='';for await(const chunk of req){size+=chunk.length;if(size>40000)throw Error('Request too large');text+=chunk;}return JSON.parse(text||'{}');};
+ // Server integrations can create a room with a validated package without listing it
+ // in the public game catalog. Origin, rate, capacity and credentials stay shared.
+ async function createRoom(req,input,privateDefinition){
+  const fail=(message,statusCode=400)=>{throw Object.assign(Error(message),{statusCode});};
+  if(closing)fail('Host is closing',503);
+  if(!permitted(req))fail('Invalid origin',403);
+  if(!rate('create:'+req.socket.remoteAddress,10))fail('Please wait before creating another room.',429);
+  maintainRooms();if(activeCount()>=maxRooms)fail('All rooms are busy. Please try again shortly.',503);
+  let definition;
+  if(privateDefinition){
+   const source=privateDefinition.source||JSON.stringify(privateDefinition.pack);
+   if(digest(source)!==privateDefinition.hash)fail('Package integrity mismatch');
+   const pack=parsePackage(source); // Private imports never enable native/server code.
+   definition={pack,source,hash:privateDefinition.hash,playerCapacity};
+   await store?.putPackage?.(definition.hash,source);
+  }else{
+   if(!games.has(input.game))await refreshGames?.();definition=games.get(input.game);
+  }
+  if(!definition)fail('Unknown game');
+  maintainRooms();if(activeCount()>=maxRooms)fail('All rooms are busy. Please try again shortly.',503);
+  const id=randomBytes(6).toString('hex'),hostToken=token(),room={id,game:definition.pack.manifest.id,definition,hostHash:hash(hostToken),members:{},language:['en','fr','tl'].includes(input.language)?input.language:'en',updatedAt:clock(),emptySince:clock(),party:new RoomParty({definition,clock})};
+  try{room.party.language=room.language;if(input.options!==undefined||input.autoStartWhenFull!==undefined)room.party.configure(input);}catch(error){room.party.dispose();throw error;}
+  packages.set(definition.hash,definition);rooms.set(id,room);
+  try{await persist(room);}catch(error){rooms.delete(id);room.party.dispose();prunePackages();throw error;}
+  return {id,hostToken,displayUrl:inviteOrigin(req)+basePath+'/r/'+id,joinUrl:inviteOrigin(req)+basePath+'/j/'+id};
+ }
  const server=http.createServer(async(req,res)=>{
   res.setHeader('X-Content-Type-Options','nosniff');res.setHeader('Referrer-Policy','no-referrer');
   try{
    const url=new URL(req.url,'http://host');if(basePath&&url.pathname!==basePath&&!url.pathname.startsWith(basePath+'/'))return json(res,404,{error:'Not found'});const path=url.pathname.slice(basePath.length)||'/';maintainRooms();
    if(req.method==='POST'&&!permitted(req))return json(res,403,{error:'Invalid origin'});
+   if(requestHandler&&await requestHandler(req,res))return;
    if(path==='/health')return json(res,200,{ok:true,rooms:activeCount(),savedRooms:rooms.size-activeCount(),connectedPlayers:[...clients.values()].filter(c=>c.role==='controller').length,playingRooms:[...rooms.values()].filter(r=>r.party&&['playing','intro'].includes(r.party.phase)).length,games:[...games.keys()]});
    if(path==='/api/games'){const requested=url.searchParams.get('game');if(requested&&!games.has(requested))await refreshGames?.();else Promise.resolve(refreshGames?.()).catch(()=>{});return json(res,200,[...games.values()].map(d=>({...d.pack.manifest,hash:d.hash})));}
-   if(path==='/api/rooms'&&req.method==='POST'){
-    if(!rate('create:'+req.socket.remoteAddress,10))return json(res,429,{error:'Please wait before creating another room.'});
-    if(activeCount()>=maxRooms)return json(res,503,{error:'All rooms are busy. Please try again shortly.'});
-    const input=await body(req);if(!games.has(input.game))await refreshGames?.();const definition=games.get(input.game);if(!definition)return json(res,400,{error:'Unknown game'});
-    maintainRooms();if(activeCount()>=maxRooms)return json(res,503,{error:'All rooms are busy. Please try again shortly.'});
-    const id=randomBytes(6).toString('hex'),hostToken=token(),room={id,game:input.game,definition,hostHash:hash(hostToken),members:{},language:['en','fr','tl'].includes(input.language)?input.language:'en',updatedAt:clock(),emptySince:clock(),party:new RoomParty({definition,clock})};
-    room.party.language=room.language;if(input.options!==undefined||input.autoStartWhenFull!==undefined)room.party.configure(input);rooms.set(id,room);await persist(room);return json(res,201,{id,hostToken,displayUrl:inviteOrigin(req)+basePath+'/r/'+id,joinUrl:inviteOrigin(req)+basePath+'/j/'+id});
-   }
+   if(path==='/api/rooms'&&req.method==='POST')return json(res,201,await createRoom(req,await body(req)));
    const api=/^\/api\/rooms\/([a-z0-9]{12})(?:\/(join|control|profile|qr))?$/.exec(path);
    if(api){
     const room=rooms.get(api[1]);if(!room)return json(res,404,{error:'This room is no longer available. Create a new room.'});
@@ -139,7 +159,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
    if(staticFile){const ext=path.slice(path.lastIndexOf('.'));res.writeHead(200,{'Content-Type':mime[ext],'Cache-Control':'no-cache'});return res.end(await readFile(resolve(here,'web',staticFile)));}
    if(req.method==='GET'&&(path==='/'||/^\/(g\/[a-z0-9-]+|[rj]\/[a-z0-9]{12})$/.test(path))){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});const html=await readFile(resolve(here,'web/index.html'),'utf8');return res.end(html.replace('<head>','<head><meta name="museum-base" content="'+basePath+'">').replace(/(href|src)="\//g,'$1="'+basePath+'/'));}
    return json(res,404,{error:'Not found'});
-  }catch(error){return json(res,400,{error:String(error.message).slice(0,180)});}
+  }catch(error){return json(res,error.statusCode||400,{error:String(error.message).slice(0,180)});}
  });
  const wss=new WebSocketServer({noServer:true,maxPayload:40000});
  server.on('upgrade',(req,socket,head)=>{if(req.url!==basePath+'/socket'||!permitted(req)||clients.size>=1000){socket.destroy();return;}wss.handleUpgrade(req,socket,head,ws=>wss.emit('connection',ws,req));});
@@ -178,7 +198,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
  },25);
  const heartbeat=setInterval(()=>{for(const [ws,c] of clients){if(!c.alive){ws.terminate();continue;}c.alive=false;ws.ping();}for(const [key,value] of limits)if(value.until<clock())limits.delete(key);},10000);
  const checkpoints=setInterval(()=>{maintainRooms();for(const room of rooms.values())persist(room)?.catch(console.error);prunePackages();pruneAvatars();},15000);
- return {server,rooms,
+ return {server,rooms,createRoom,
  async registerGame(definition){if(closing)throw Error('Host is closing');const source=definition.source||JSON.stringify(definition.pack);if(digest(source)!==definition.hash)throw Error('Package integrity mismatch');const pack=parsePackage(source,{allowNative:Boolean(definition.createEngine)});await store?.putPackage?.(definition.hash,source);const pinned={...definition,playerCapacity,pack,source};packages.set(pinned.hash,pinned);games.set(pack.manifest.id,pinned);prunePackages();},
  removeGame(id){games.delete(id);prunePackages();},
  async close(){closing=true;clearInterval(ticker);clearInterval(heartbeat);clearInterval(checkpoints);for(const ws of wss.clients)ws.terminate();await new Promise(resolve=>wss.close(resolve));await Promise.all([...rooms.values()].map(persist));await Promise.allSettled([...pendingDeletes]);for(const room of rooms.values())room.party?.dispose();await new Promise(resolve=>server.close(resolve));}};

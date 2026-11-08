@@ -13,7 +13,7 @@ export function personalScreenEnabled(storage,search=''){
 
 // The personal display uses the existing read-only display connection. It never
 // joins another player or receives the controller's private snapshot or token.
-export function createPersonalScreen({toolbar,language,protocol,hello,project=s=>s,source,socketPath='/socket',onToggle=()=>{}}){
+export function createPersonalScreen({toolbar,language,protocol,hello,project=s=>s,source,loadFrame=(frame,url)=>{frame.src=url;},socketPath='/socket',onToggle=()=>{}}){
  let enabled=personalScreenEnabled(localStorage,location.search),container,panel,frame,frameUrl,
   socket,retryTimer,watchdog,attempt=0,lastMessage=0,latest,previous,ready=false,inFlight=0,
   renderAck=false,renderId=0,lastSent,draw,online=false;
@@ -37,7 +37,7 @@ export function createPersonalScreen({toolbar,language,protocol,hello,project=s=
  function show(state){
   const url=source(state);latest=project(state);
   if(url!==frameUrl){frame?.remove();frame=null;frameUrl=url;ready=false;inFlight=0;renderAck=false;
-   if(url){frame=document.createElement('iframe');frame.title=text('screen');frame.className='personal-screen-frame';frame.setAttribute('sandbox','allow-scripts allow-modals');frame.setAttribute('allow','autoplay');frame.src=url;panel.append(frame);resize();}}
+   if(url){frame=document.createElement('iframe');frame.title=text('screen');frame.className='personal-screen-frame';frame.setAttribute('sandbox','allow-scripts allow-modals');frame.setAttribute('allow','autoplay');loadFrame(frame,url);panel.append(frame);resize();}}
   status();schedule();
  }
  function open(){

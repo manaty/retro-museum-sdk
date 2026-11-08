@@ -15,7 +15,7 @@ const token=()=>randomBytes(32).toString('base64url');
 const matches=(value,expected)=>typeof value==='string'&&typeof expected==='string'&&timingSafeEqual(Buffer.from(hash(value)),Buffer.from(expected));
 const validId=id=>typeof id==='string'&&/^[a-z0-9]{12}$/.test(id);
 const here=dirname(fileURLToPath(import.meta.url));
-const mime={'.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.html':'text/html; charset=utf-8'};
+const mime={'.js':'text/javascript; charset=utf-8','.css':'text/css; charset=utf-8','.html':'text/html; charset=utf-8','.webmanifest':'application/manifest+json','.svg':'image/svg+xml','.png':'image/png','.wasm':'application/wasm'};
 
 export async function loadGame(path,{createEngine}={}){const bytes=await readFile(path);return {pack:parsePackage(bytes,{allowNative:typeof createEngine==='function'}),source:bytes.toString('utf8'),hash:digest(bytes),createEngine};}
 export function fileRoomStore(directory){
@@ -119,7 +119,7 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
    if(req.method==='POST'&&!permitted(req))return json(res,403,{error:'Invalid origin'});
    if(requestHandler&&await requestHandler(req,res))return;
    if(path==='/health')return json(res,200,{ok:true,rooms:activeCount(),savedRooms:rooms.size-activeCount(),connectedPlayers:[...clients.values()].filter(c=>c.role==='controller').length,playingRooms:[...rooms.values()].filter(r=>r.party&&['playing','intro'].includes(r.party.phase)).length,games:[...games.keys()]});
-   if(path==='/api/games'){const requested=url.searchParams.get('game');if(requested&&!games.has(requested))await refreshGames?.();else Promise.resolve(refreshGames?.()).catch(()=>{});return json(res,200,[...games.values()].map(d=>({...d.pack.manifest,hash:d.hash})));}
+   if(path==='/api/games'){const requested=url.searchParams.get('game');if(requested&&!games.has(requested))await refreshGames?.();else Promise.resolve(refreshGames?.()).catch(()=>{});return json(res,200,[...games.values()].map(d=>({...d.pack.manifest,hash:d.hash,offline:!d.createEngine})));}
    if(path==='/api/rooms'&&req.method==='POST')return json(res,201,await createRoom(req,await body(req)));
    const api=/^\/api\/rooms\/([a-z0-9]{12})(?:\/(join|control|profile|qr|handoff|redeem))?$/.exec(path);
    if(api){
@@ -163,8 +163,10 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
     }
     return json(res,405,{error:'Method not allowed'});
    }
-   const packPath=/^\/packages\/([a-f0-9]{64})\/(view|assets\/(.+))$/.exec(path);
+   const packPath=/^\/packages\/([a-f0-9]{64})\/(view|package\.json|assets\/(.+))$/.exec(path);
    if(packPath){const definition=packages.get(packPath[1]);if(!definition)return json(res,404,{error:'Unknown version'});
+    // Complete immutable package for offline play; native engines cannot run in browsers.
+    if(packPath[2]==='package.json'){if(definition.createEngine)return json(res,404,{error:'Not available offline'});res.writeHead(200,{'Content-Type':'application/json; charset=utf-8','Cache-Control':'public,max-age=31536000,immutable'});return res.end(definition.source||JSON.stringify(definition.pack));}
     res.setHeader('Cache-Control','public,max-age=31536000,immutable');
     if(packPath[2]==='view'){
      const csp="sandbox allow-scripts allow-modals; default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; img-src 'self' data:; media-src 'self'; font-src 'self'; connect-src 'self'; form-action 'none'; base-uri 'none'";
@@ -173,8 +175,8 @@ export async function createGameHost({definitions,store,publicOrigin,allowedOrig
     const asset=definition.pack.assets[packPath[3]];if(!asset)return json(res,404,{error:'Unknown asset'});res.setHeader('Access-Control-Allow-Origin','*');res.setHeader('Content-Type',asset.type);return res.end(Buffer.from(asset.data,'base64'));
    }
    const avatar=/^\/avatars\/([a-f0-9]{64})\.jpg$/.exec(path);if(avatar){if(!avatars.has(avatar[1]))return json(res,404,{error:'Unknown avatar'});res.writeHead(200,{'Content-Type':'image/jpeg','Cache-Control':'public,max-age=31536000,immutable'});return res.end(avatars.get(avatar[1]));}
-   const staticFile={'/host.js':'host-client.js','/host.css':'host.css','/compat.js':'host-compat.js','/personal-screen.css':'personal-screen.css'}[path];
-   if(staticFile){const ext=path.slice(path.lastIndexOf('.'));res.writeHead(200,{'Content-Type':mime[ext],'Cache-Control':'no-cache'});return res.end(await readFile(resolve(here,'web',staticFile)));}
+   const staticFile={'/host.js':'host-client.js','/host.css':'host.css','/compat.js':'host-compat.js','/personal-screen.css':'personal-screen.css','/offline.js':'offline.js','/offline-runtime.js':'offline-runtime.js','/quickjs.wasm':'quickjs.wasm','/sw.js':'sw.js','/manifest.webmanifest':'manifest.webmanifest','/icons/icon.svg':'icons/icon.svg','/icons/icon-192.png':'icons/icon-192.png','/icons/icon-512.png':'icons/icon-512.png','/icons/maskable-512.png':'icons/maskable-512.png'}[path];
+   if(staticFile){const ext=path.slice(path.lastIndexOf('.'));res.writeHead(200,{'Content-Type':mime[ext],'Cache-Control':'no-cache',...(path==='/sw.js'?{'Service-Worker-Allowed':basePath+'/'}:{})});return res.end(await readFile(resolve(here,'web',staticFile)));}
    if(req.method==='GET'&&(path==='/'||/^\/(g\/[a-z0-9-]+|[rj]\/[a-z0-9]{12})$/.test(path))){res.writeHead(200,{'Content-Type':'text/html; charset=utf-8','Cache-Control':'no-store'});const html=await readFile(resolve(here,'web/index.html'),'utf8');return res.end(html.replace('<head>','<head><meta name="museum-base" content="'+basePath+'">').replace(/(href|src)="\//g,'$1="'+basePath+'/'));}
    return json(res,404,{error:'Not found'});
   }catch(error){return json(res,error.statusCode||400,{error:String(error.message).slice(0,180)});}

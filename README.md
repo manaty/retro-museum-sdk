@@ -97,3 +97,27 @@ Restarts preserve the absence deadline; a connected room gets a reconnection gra
 The browser host negotiates `stateDeltas: 1` in its socket hello. The initial rollout is limited to Serpents; other games and older clients retain full snapshots. Game frames still receive the same reconstructed state through `postMessage`, so the game rendering contract is unchanged. Controller updates remain capped at 10 Hz and displays at 20 Hz, with existing rendering acknowledgements and backpressure.
 
 Each socket owns its baseline, committed only after the matching state acknowledgement. Stable `id` arrays transmit additions, removals and changed fields. Serpents trajectory points use `[x,y,sequence]` and descending sequence order. Full snapshots are sent on connect, match changes, resynchronisation, or when a delta would not save at least 10%. A browser detecting a missing baseline requests `resync`. No credentials or private snapshots are shared across clients. `StateEncoder` and `StateDecoder` are exported through `@manaty/retro-museum-sdk/state-delta` for protocol testing.
+
+## Installable app and offline play over a Wi-Fi hotspot (SDK 1.13)
+
+The standalone host is an installable web app (manifest, icons and service worker at `/sw.js`). Pages, scripts and `/api/games` are network-first with a cached fallback. `/packages/HASH/package.json` serves each complete immutable package; the service worker caches it, and `/api/games` marks each game `offline: true|false`. Native engines (for example ZX80) are not available offline.
+
+**Download games for offline play** on the catalogue stores every offline-capable package in Cache Storage and requests persistent storage. The organiser's device needs the downloaded games. Players only need to have opened the app once while online: a connected player who lacks a game receives the verified package from the organiser over the local link.
+
+With **Offline games (Wi-Fi hotspot)** enabled, creating a game starts an in-browser host on the organiser's device. It reuses `RoomParty` with QuickJS compiled to WebAssembly (`/quickjs.wasm`) and the same request and socket protocol as `host.js`, so the standard client UI is unchanged. Rooms are saved in IndexedDB and restored if the hosting tab reloads; offline rooms are kept for 24 hours. Tabs on the same device share one host through Web Locks and `BroadcastChannel`; another tab takes over if the hosting tab closes.
+
+Players join without any server or Internet:
+
+1. The organiser turns on their phone's Wi-Fi hotspot (or all devices use the same Wi-Fi) and creates an offline game.
+2. The organiser screen shows an invitation QR code containing a WebRTC offer (no STUN/TURN, local addresses only). A player scans it with the camera or **Join an offline game** in the app.
+3. The player's phone displays an answer QR code, which the organiser's camera reads. A data channel then carries the room protocol (requests and sockets are tunnelled; large messages are chunked).
+
+Each invitation code is single use; a new one appears after each connection. If a player's connection drops, their phone asks them to scan the current code again and keeps the same seat. The organiser's device needs a camera; codes can also be pasted for testing. Avatars are omitted offline; device transfer links are not available offline.
+
+Game views remain in an opaque-origin sandbox. Because browsers never let service workers serve sandboxed frames, offline views use a small loader document: the parent sends the view HTML and package assets by `postMessage`, the loader creates blob URLs inside the sandbox and writes the view. Static `assets/…` references and common dynamic ones (`img.src`, media `src`, `setAttribute`, `Audio`, `fetch`, `XMLHttpRequest`, `FontFace`) are mapped. A view's content security policy then only allows inline code and blob/data resources.
+
+Limits: browser support for local WebRTC connections varies. Chromium only reveals the real local address in the offer after camera permission is granted, which the organiser's pairing screen requests first. Some Android hotspots or managed networks isolate clients; then use any ordinary Wi-Fi access point. This has been verified with automated browser tests on one computer, not yet on a whole class of phones.
+
+A browser check is in `scripts/offline-e2e.cjs` (Playwright): it downloads games, stops the origin server, hosts UNO and Werewolves offline, pairs players by code, starts a match and transfers a 20 MB package to a player.
+
+Run `npm run build` after changing `web/host-source.js` or `web/offline/*`; the bundles (`host-client.js`, `offline.js`, `offline-runtime.js`) and `quickjs.wasm` are committed so hosts never run a build step.

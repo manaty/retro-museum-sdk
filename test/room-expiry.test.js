@@ -15,7 +15,7 @@ async function rig({store=memory(),now=100000,maxRooms=1}={}){
  let time=now;const sockets=[];const host=await createGameHost({definitions:[definition],store,clock:()=>time,maxRooms});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));const base='http://127.0.0.1:'+host.server.address().port;
  const request=(path,value,token)=>fetch(base+path,{...(value?{method:'POST',body:JSON.stringify(value)}:{}),headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})}});
  const health=async()=>await(await request('/health')).json();
- async function connect(id,role,token){const ws=new WebSocket(base.replace('http','ws')+'/socket');sockets.push(ws);ws.messages=[];ws.on('message',b=>{const m=JSON.parse(b);ws.messages.push(m);if(m.type==='state')ws.send(JSON.stringify({type:'ack',sequence:m.sequence}));});await once(ws,'open');ws.send(JSON.stringify({type:'hello',room:id,role,token}));for(let i=0;i<100;i++){const answer=ws.messages.find(m=>['welcome','error','roomExpired'].includes(m.type));if(answer)return {ws,answer};await new Promise(r=>setTimeout(r,5));}throw Error('Handshake timeout');}
+ async function connect(id,role,token,hostToken){const ws=new WebSocket(base.replace('http','ws')+'/socket');sockets.push(ws);ws.messages=[];ws.on('message',b=>{const m=JSON.parse(b);ws.messages.push(m);if(m.type==='state')ws.send(JSON.stringify({type:'ack',sequence:m.sequence}));});await once(ws,'open');ws.send(JSON.stringify({type:'hello',room:id,role,token,hostToken}));for(let i=0;i<100;i++){const answer=ws.messages.find(m=>['welcome','error','roomExpired'].includes(m.type));if(answer)return {ws,answer};await new Promise(r=>setTimeout(r,5));}throw Error('Handshake timeout');}
  return {host,store,request,health,connect,set(t){time=t;},get now(){return time;},async create(){return (await request('/api/rooms',{game:'idle-test'})).json();},async close(){for(const ws of sockets)ws.terminate();await host.close();}};
 }
 test('empty room releases capacity at 30 seconds despite an open display; saves expire at 10 minutes',async()=>{
@@ -65,4 +65,25 @@ test('expiration deletes after pending saves and shutdown waits for the deletion
  r.set(700000);await r.health();assert.equal(r.host.rooms.size,0);
  let closed=false;const closing=r.close().then(()=>{closed=true;});await pause();assert.equal(closed,false);
  release();await closing;await old.saving;assert.equal(store.data.has(room.id),false);
+});
+
+test('paused organiser board keeps the room joinable when phones disconnect, without exposing private state',async()=>{
+ const r=await rig();try{
+  const room=await r.create(),path='/api/rooms/'+room.id,member=await(await r.request(path+'/join',{profile:{name:'Alice'}})).json();
+  const phone=await r.connect(room.id,'controller',member.token),board=await r.connect(room.id,'display',undefined,room.hostToken);
+  assert.equal(board.answer.type,'welcome');await r.request(path+'/control',{action:'start'},room.hostToken);r.set(104000);await pause();
+  await r.request(path+'/control',{action:'pause'},room.hostToken);const party=r.host.rooms.get(room.id).party,match=party.id,remaining=party.remaining();
+  phone.ws.close();await once(phone.ws,'close');await pause();r.set(900000);
+  assert.equal((await r.request(path)).status,200);assert.equal(r.host.rooms.get(room.id).emptySince,null);assert.equal(party.phase,'paused');assert.equal(party.remaining(),remaining);
+  const guest=await(await r.request(path+'/join',{profile:{name:'Bob'}})).json(),joined=await r.connect(room.id,'controller',guest.token);assert.equal(joined.answer.type,'welcome');assert.equal(party.id,match);assert.equal(party.phase,'paused');assert.equal(party.players.find(p=>p.id===guest.playerId).spectator,true);
+  const returning=await r.connect(room.id,'controller',member.token);assert.equal(returning.answer.type,'welcome');assert.equal(party.phase,'paused','manual pause survives a returning player');
+  assert.equal((await r.request(path+'/control',{action:'resume'},room.hostToken)).status,200);assert.equal(party.phase,'playing');
+  await pause();assert.ok(board.ws.messages.some(m=>m.type==='state'));for(const m of board.ws.messages.filter(m=>m.type==='state'))assert.equal(m.state.party.community?.private,undefined);
+  board.ws.close();await once(board.ws,'close');returning.ws.close();await once(returning.ws,'close');joined.ws.close();await once(joined.ws,'close');await pause();assert.equal(r.host.rooms.get(room.id).emptySince,900000);
+  r.set(1500000);assert.equal((await r.request(path)).status,404);
+ }finally{await r.close();}
+});
+
+test('an unauthenticated or invalid organiser display cannot extend room retention',async()=>{
+ const r=await rig();try{const room=await r.create();await r.connect(room.id,'display',undefined,'invalid');r.set(700000);assert.equal((await r.request('/api/rooms/'+room.id)).status,404);}finally{await r.close();}
 });

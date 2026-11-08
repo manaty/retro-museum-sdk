@@ -3,3 +3,244 @@
 
 .invite-player{display:inline-flex;align-items:center;white-space:nowrap;font-size:12px}.invite-player span{margin-left:7px}.invite-player svg{flex-shrink:0}@media(max-width:520px){body[data-role=controller] .top .brand{display:none}body[data-role=controller] .top .tools{width:100%;justify-content:space-between}body[data-role=controller] .invite-player{padding:8px}body[data-role=controller] #profile{max-width:65px;overflow:hidden;text-overflow:ellipsis}}
 @media(max-width:520px){body[data-role=controller] .top{height:auto;min-height:56px}body[data-role=controller] .tools{flex-wrap:wrap}}
+
+/* Catalog and single-device play share the existing host palette. */
+.landing-intro{padding:12px 0 32px;border-bottom:1px solid #30453d}
+.landing-intro h1{max-width:900px;font-size:clamp(36px,5.8vw,68px);letter-spacing:-2.5px}
+.instant{display:flex;align-items:center;gap:10px;font-size:14px;color:#d5e4cd;margin-top:24px}
+.instant span{color:#c4f28a}
+.catalog{padding-top:30px}
+.catalog-heading{display:flex;align-items:center;justify-content:space-between;gap:20px}
+.catalog-heading h2{font-size:24px;letter-spacing:-.5px;margin:0}
+.search{display:block;max-width:320px;width:100%}
+.search span{display:block;font-size:12px;color:#bacac2;margin-bottom:6px}
+.search input{width:100%;background:#152722;min-height:44px}
+.search input::placeholder{color:#a1b6aa}
+.catalog-filters{display:flex;flex-wrap:wrap;gap:8px;margin-top:22px}
+.catalog-filters button{border-radius:24px;min-height:44px;background:transparent}
+.catalog-filters button[aria-pressed=true]{background:#c4f28a;color:#12220d;border-color:#c4f28a;font-weight:700}
+.catalog-count{font-size:12px;color:#bacac2;margin:16px 0}
+.games{margin-top:0;grid-template-columns:repeat(auto-fill,minmax(min(280px,100%),1fr))}
+.game{transition:border-color .15s ease}
+.game:hover{border-color:#7e9f79}
+.game-art{position:relative;height:170px;background:radial-gradient(ellipse at 70% 20%,#456747,#182f2a);overflow:hidden}
+.game-art>span:not(.solo-badge){font-size:64px;color:#deedcc}
+.solo-badge{position:absolute;left:14px;bottom:12px;background:#12221eea;border:1px solid #698659;border-radius:20px;padding:5px 10px;color:#d5f3b2;font-size:12px}
+.game-info{padding:20px}
+.game-info h3{font-size:23px;letter-spacing:-.4px;margin:8px 0 0}
+.game-info p{font-size:14px;margin:12px 0 20px}
+.game-actions{width:100%;display:grid;gap:8px}
+.game-actions button{display:flex;justify-content:space-between;align-items:center;min-height:44px;text-align:left;gap:12px}
+.catalog-empty{grid-column:1/-1;text-align:center;padding:50px 20px;border:1px dashed #45625b;border-radius:20px;color:#bacac2}
+.player-room{height:100%;display:flex;flex-direction:column;min-height:0}
+.player-room>.player-screen{flex:1;min-height:0;height:auto}
+.player-host{flex-shrink:0;background:#192b26;border-bottom:1px solid #45625b;padding:14px 24px;max-height:45%;overflow:auto}
+.player-host-heading{display:flex;justify-content:space-between;align-items:center;gap:16px}
+.player-host h1{font-size:18px;line-height:1.2;margin:0 0 6px}
+.player-host p{margin:0;line-height:1.5}
+.player-host .controls{display:flex;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.player-host .controls button{min-height:44px}
+.player-host details{margin-top:10px}
+.player-host summary{cursor:pointer;color:#c4f28a;font-size:13px;padding:6px 0;width:fit-content}
+.player-host summary:focus-visible{outline:3px solid #c4f28a;outline-offset:3px}
+.option-fields{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px;padding:14px 0}
+.option-fields label{display:flex;flex-direction:column;font-size:13px;gap:6px}
+.option-fields .auto-start{grid-column:1/-1;flex-direction:row;align-items:center}
+.option-fields .auto-start input{width:auto;margin:0}
+.play-here{display:block;text-decoration:none;text-align:center;border-radius:10px;padding:12px;margin:12px 0;font-size:13px}
+@media(max-width:600px){
+ .catalog-heading{align-items:flex-start;flex-direction:column;gap:16px}
+ .search{max-width:none}.catalog-filters{gap:6px}.catalog-filters button{font-size:13px;padding:10px 12px}
+ .landing-intro h1{letter-spacing:-1.5px}.landing .lead{font-size:17px}
+ .player-host{padding:10px 12px;max-height:42%}
+ .player-host-heading{align-items:flex-start;flex-direction:column;gap:10px}
+ .player-host .controls{width:100%}.player-host .controls button{flex:1}
+ .player-host h1{font-size:16px}.room-message{font-size:11px}
+ .option-fields{grid-template-columns:1fr}
+}
+@media(prefers-reduced-motion:reduce){.game{transition:none}}
+
+/* Arcade cabinet details stay decorative; controls keep standard readable text. */
+html,body{background:#0c0c19;color:#f0edff}
+.top{background:#111122;border-bottom:1px solid #34304c}
+.brand{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;letter-spacing:1px}
+.brand span,.eyebrow{color:#6df8db}
+button,select,input{background:#1c1a32;border-color:#51486f;border-radius:6px}
+button:hover:not(:disabled){border-color:#bd9cff}
+button:focus-visible,a:focus-visible,input:focus-visible,select:focus-visible,.player-host summary:focus-visible{outline-color:#6df8db}
+.primary,.play-here{background:#6df8db;color:#101326;border-color:#6df8db;box-shadow:0 3px 0 #277363}
+.primary:hover:not(:disabled){background:#9effea;border-color:#9effea}
+.landing-intro{display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:50px;align-items:center;border-color:#34304c;padding-bottom:40px}
+.landing-intro h1{font-size:clamp(34px,4.6vw,60px);letter-spacing:-1.8px}
+.eyebrow{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;letter-spacing:2px}
+.landing .lead{color:#b7b0ce}
+.instant{font-size:13px;color:#c8c1df}.instant span{color:#ffd87d}
+.catalog-heading h2,.game-info h3,.player-host h1{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-weight:800}
+.search span,.catalog-count,.game-info p{color:#bcb4d1}
+.search input{background:#141325}.search input::placeholder{color:#a59cb9}
+.catalog-filters button{border-radius:6px;background:#141325}
+.catalog-filters button[aria-pressed=true]{background:#6df8db;color:#101326;border-color:#6df8db;box-shadow:0 3px 0 #277363}
+.game{border:1px solid #403653;border-radius:10px;background:#161426;box-shadow:0 5px 0 #070710}
+.game:hover{border-color:#aa83ed}
+.game-art{background:radial-gradient(ellipse at 50% 80%,#5c347d,#211933);border-bottom:1px solid #403653}
+.game-art::after{content:"";pointer-events:none;position:absolute;inset:0;background:repeating-linear-gradient(0deg,transparent 0 3px,#08071714 3px 4px)}
+.game[data-game-id=quizz] .game-art,.game[data-game-id=tongits] .game-art{background:radial-gradient(ellipse at 50% 80%,#78502b,#30202b)}
+.game[data-game-id=tanks] .game-art,.game[data-game-id=marbble] .game-art{background:radial-gradient(ellipse at 50% 80%,#275f58,#152d30)}
+.game[data-game-id=chess] .game-art,.game[data-game-id=zx80] .game-art{background:radial-gradient(ellipse at 50% 80%,#324a7e,#1c1c38)}
+.game-art>span:not(.solo-badge){color:#f0e5ff;font-family:ui-monospace,Consolas,monospace;text-shadow:3px 3px 0 #0c0c19,0 0 24px #bd9cff55}
+.solo-badge{background:#111122ed;border-color:#6df8db88;border-radius:4px;color:#97ffe7;z-index:1}
+.game-info small{color:#d2b8ff;font-family:ui-monospace,Consolas,monospace}
+.catalog-empty{border-color:#51486f;color:#bcb4d1;border-radius:8px}
+.player-host,.dialog form{background:#161426;border-color:#51486f}
+.player-host summary,.room-message,.room-side .invite{color:#97ffe7}
+.stage,.personal-screen-panel{background:#0c0c19}
+.room-side{background:#111122;border-color:#403653}.room-side p,.dialog p{color:#bcb4d1}
+.organiser{border-color:#403653}
+.personal-screen-toggle{background:#1c1a32;color:#f0edff;border-color:#51486f}
+.personal-screen-toggle[aria-pressed=true]{background:#6df8db;color:#101326;border-color:#6df8db}
+.personal-screen-layout{background:#403653}.personal-screen-status{background:#0c0c19f0;color:#e0d5f5}
+.arcade-cabinet{position:relative;border:2px solid #9875ca;border-radius:18px 18px 8px 8px;background:#201a38;padding:16px;transform:rotate(3deg);box-shadow:10px 10px 0 #070710,0 0 60px #9b5bff15;user-select:none}
+.arcade-marquee{border:1px solid #bd9cff;background:#111122;padding:10px 6px;text-align:center;font:bold 15px ui-monospace,Consolas,monospace;color:#ffd87d;letter-spacing:1px;box-shadow:inset 0 0 20px #bd9cff10}
+.arcade-screen{margin-top:12px;background:#090e1b;border:8px solid #332a48;border-radius:10px;padding:12px 8px 20px;color:#6df8db;box-shadow:inset 0 0 40px #6df8db0a}
+.arcade-score{display:flex;justify-content:space-between;font:10px ui-monospace,Consolas,monospace;letter-spacing:1px;color:#c7b6ef}
+.arcade-sprites{width:100%;margin:24px 0 10px;filter:drop-shadow(0 0 5px #6df8db50);shape-rendering:crispEdges}
+.arcade-sprites path:nth-child(2){fill:#bd9cff}.arcade-sprites path:nth-child(3){fill:#ffd87d}
+.arcade-prompt{text-align:center;color:#f0edff;font:bold 13px ui-monospace,Consolas,monospace;letter-spacing:2px}
+.arcade-prompt span{display:block;font-size:10px;color:#6df8db;margin-top:10px}
+.arcade-deck{display:flex;align-items:center;justify-content:flex-end;gap:10px;padding:20px 12px 4px}
+.arcade-deck i{margin-right:auto;width:28px;height:10px;background:#6df8db;border-radius:50%;box-shadow:0 5px 0 #297366;position:relative}
+.arcade-deck i::before{content:"";position:absolute;width:5px;height:22px;background:#a69dbd;left:12px;bottom:4px}
+.arcade-deck i::after{content:"";position:absolute;width:17px;height:17px;background:#bd9cff;border-radius:50%;left:6px;bottom:19px;box-shadow:inset -4px -4px 0 #67428c}
+.arcade-deck b{width:19px;height:19px;background:#ffd87d;border-radius:50%;box-shadow:0 4px 0 #927027}
+.arcade-deck b:last-child{background:#fd81b8;box-shadow:0 4px 0 #a4366a}
+@media(max-width:950px){.landing-intro{grid-template-columns:minmax(0,1fr) 230px;gap:26px}.arcade-cabinet{padding:12px}.arcade-marquee{font-size:12px}}
+@media(max-width:650px){.landing-intro{display:block}.arcade-cabinet{display:none}.landing-intro h1{font-size:39px;letter-spacing:-1.5px}.landing{padding-top:24px}.brand{font-size:10px}.tools select{max-width:100px}.catalog-heading h2{font-size:22px}}
+.robot-roster{margin:12px 0;padding:12px;border:1px solid #51486f;border-radius:8px;background:#111122}
+.robot-roster h2{font-size:14px;margin:0 0 6px;color:#d2b8ff}
+.robot-roster p{font-size:12px;color:#bcb4d1;line-height:1.5}
+.robot-list{display:flex;flex-wrap:wrap;gap:8px;margin:10px 0}
+.robot-row{display:flex;align-items:center;gap:8px;font-size:13px}
+.robot-row label{margin:0}.robot-row select,.robot-row button{padding:8px;min-height:40px;font-size:12px}
+.robot-roster>[data-add-bot]{font-size:12px;min-height:40px}
+.room-side .robot-list{display:block}.room-side .robot-row{flex-wrap:wrap;margin:8px 0}.room-side .robot-row>span{width:100%}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
+@media(max-width:600px){.robot-roster{padding:8px}.robot-roster p{font-size:11px}.robot-row{gap:6px}.robot-list{display:block}.robot-row{margin:8px 0}}
+.player-host .host-settings{margin-top:4px}
+.host-settings>summary{font-size:12px;padding:4px 0}
+.host-settings>summary span{color:#bcb4d1}
+@media(max-width:600px){
+ body[data-role=controller] .top{height:48px;min-height:48px;padding:4px 8px;gap:8px}
+ body[data-role=controller] .top .brand{display:block;font-size:0;letter-spacing:0;flex:0 0 32px;text-align:center}
+ body[data-role=controller] .top .brand::before{content:'⌂';font-size:24px;color:#6df8db}
+ body[data-role=controller] .top .brand span{display:none}
+ body[data-role=controller] .top .tools{width:auto;flex:1;flex-wrap:nowrap;justify-content:flex-end;gap:6px;min-width:0}
+ body[data-role=controller] .top #connection{font-size:0;flex-shrink:0}
+ body[data-role=controller] .top #connection::before{content:'●';font-size:9px;color:#bcb4d1}
+ body[data-role=controller] .top #connection[data-online=true]::before{color:#6df8db}
+ body[data-role=controller] .top #connection:empty{display:none}
+ body[data-role=controller] .tools select{width:90px;max-width:90px;padding:8px 4px;font-size:12px;height:40px}
+ body[data-role=controller] .top #profile{max-width:54px;min-width:40px;padding:8px;font-size:12px;height:40px}
+ body[data-role=controller] .invite-player{width:40px;height:40px;justify-content:center;padding:8px;flex-shrink:0}
+ body[data-role=controller] .invite-player span{display:none}
+ body[data-role=controller] .personal-screen-toggle{height:40px;width:40px;min-width:40px;padding:6px;font-size:0}
+ body[data-role=controller] .personal-screen-toggle::before{content:'▤';font-size:22px}
+ .player-host{padding:8px 12px;max-height:45%}
+ .player-host-heading{flex-direction:row;align-items:center;gap:8px}
+ .player-host-heading>div:first-child{flex:1;min-width:0}
+ .player-host h1{font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-bottom:3px}
+ .player-host .room-message{font-size:10px;line-height:1.3;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+ .player-host .controls{width:auto;flex-shrink:0;flex-wrap:nowrap;gap:6px}
+ .player-host .controls button{flex:0 0 auto;min-height:40px;padding:8px 10px;font-size:12px}
+ .host-settings[open] .host-settings-content{padding-top:4px}
+ .host-settings .robot-roster{margin:6px 0}
+ .personal-screen-layout{grid-template-rows:minmax(0,30fr) minmax(0,70fr)}
+}
+@media(orientation:landscape) and (max-height:500px){
+ body[data-role=controller] .top{height:40px;min-height:40px;padding-top:2px;padding-bottom:2px}
+ body[data-role=controller] .top .tools button,body[data-role=controller] .top .tools select{height:34px;min-height:34px}
+ .player-host{padding:4px 12px;max-height:45%}
+ .player-host-heading{flex-direction:row;align-items:center;gap:12px}
+ .player-host h1{font-size:12px;margin:0}.player-host .room-message{display:none}
+ .player-host .controls{width:auto;flex-wrap:nowrap}.player-host .controls button{min-height:34px;padding:6px 10px;font-size:12px}
+ .player-host .host-settings{margin-top:0}.host-settings>summary{padding:2px 0;font-size:11px}
+}
+@supports(height:100dvh){body[data-role=controller]{height:100dvh}}
+.invitation-heading{display:flex;align-items:center;justify-content:space-between;gap:12px}
+.invitation-heading h2{font-size:21px;margin:0;font-family:ui-monospace,Consolas,monospace}
+.invitation-close{min-width:44px;min-height:44px;padding:5px;font-size:25px;flex-shrink:0}
+.invitation-game{font-size:13px;color:#c8b7e4;margin:4px 0 16px}
+.invitation-instruction{font-size:14px;line-height:1.5;text-align:center;margin:12px 0}
+.invitation-qr{width:fit-content;max-width:100%;padding:12px;margin:16px auto;background:#fff;border-radius:10px;line-height:0}
+.invitation-qr img{display:block;max-width:100%;height:auto}
+.invitation-status{font-size:13px;color:#97ffe7;min-height:1.5em;margin:12px 0 6px}
+.invitation-url{width:100%;min-width:0;font-size:13px;padding:12px}
+.invitation-actions{display:flex;gap:8px;margin-top:16px;flex-wrap:wrap}
+.invitation-actions button{flex:1;min-height:44px}
+@media(max-height:500px) and (orientation:landscape){
+ .invite-link-dialog .invitation-card{--invitation-width:580px;--invitation-padding:16px;display:grid;grid-template-columns:180px minmax(0,1fr);gap:0 20px}
+ .invitation-heading,.invitation-game,.invitation-status,.invitation-url,.invitation-actions{grid-column:2}
+ .invitation-qr{grid-column:1;grid-row:1/6;align-self:center;margin:0;padding:10px}
+ .invitation-qr img{width:160px;height:auto}
+ .invitation-instruction{grid-column:1/-1;grid-row:6;margin:8px 0 0;font-size:12px}
+ .invitation-game{margin-bottom:4px}.invitation-status{margin-top:4px}
+}
+@media(max-height:650px) and (orientation:portrait){
+ .invitation-card{--invitation-padding:16px}
+ .invitation-heading h2{font-size:18px}.invitation-close{min-width:40px;min-height:40px}
+ .invitation-game{font-size:12px;margin:4px 0}
+ .invitation-instruction{font-size:13px;margin:8px 0}
+ .invitation-qr{margin:8px auto;padding:12px}.invitation-qr img{width:176px}
+ .invitation-status{font-size:12px;margin:6px 0}
+ .invitation-url{font-size:12px;padding:10px}.invitation-actions{margin-top:10px}
+}
+
+/* Move a public board or the current player's controls to another device. */
+.board-only .room-side{display:none}
+.board-only .room{grid-template-columns:minmax(0,1fr)}
+.device-screen-options{display:flex;flex-wrap:wrap;gap:6px;margin:12px 0}
+.device-screen-options>button{flex:1;padding:8px 10px;font-size:.85rem}
+.device-screen-options>button[aria-pressed=true]{background:#65efd6;color:#102329;border-color:#65efd6}
+.device-screen-options>.device-screen-local{flex-basis:100%;background:transparent}
+@media(max-width:600px){.tools .device-screen-button{font-size:0;min-width:36px;padding:8px}.tools .device-screen-button::before{content:'▣ ↗';font-size:16px}}
+.board-only .room .stage{min-height:0}
+.device-link-dialog .invitation-heading h2{font-size:18px}
+@media(max-height:650px) and (orientation:portrait){
+ .device-link-dialog .invitation-card{--invitation-padding:12px}
+ .device-link-dialog .device-screen-options{margin:8px 0}
+ .device-link-dialog .device-screen-options>button{padding:6px;font-size:12px}
+ .device-link-dialog .invitation-instruction{font-size:12px;line-height:1.35;margin:6px 0}
+ .device-link-dialog .invitation-qr{padding:8px;margin:6px auto}
+ .device-link-dialog .invitation-qr img{width:144px}
+ .device-link-dialog .invitation-heading h2{font-size:16px}
+ .device-link-dialog .invitation-status{min-height:0}
+ .device-link-dialog .invitation-actions{margin-top:6px}
+}
+@media(max-height:500px) and (orientation:landscape){
+ .device-link-dialog .device-screen-options{grid-column:2;margin:6px 0}
+ .device-link-dialog .invitation-qr{grid-row:1/7}
+ .device-link-dialog .invitation-instruction{grid-row:7}
+ .device-link-dialog .invitation-heading h2{font-size:16px}
+ .device-link-dialog .invitation-actions{margin-top:6px}
+}
+.board-only .player-room>.room{flex:1;min-height:0;height:auto}
+.tools .device-screen-button{display:inline-flex;align-items:center;justify-content:center;gap:8px;height:44px;min-height:44px;padding:10px 14px;font-size:13px;line-height:1;white-space:nowrap;flex-shrink:0;border:1px solid #51486f;border-radius:10px;background:#201c33;color:#f0edff}
+.tools .device-screen-button svg{flex-shrink:0}
+.tools .device-screen-button::before{content:none}
+@media(max-width:1100px){.tools .device-screen-button{width:44px;padding:10px}.tools .device-screen-button span{display:none}}
+@media(max-width:600px){.tools .device-screen-button{width:40px;min-width:40px;height:40px;min-height:40px;padding:8px}}
+/* Keep room tools outside the game's pause overlay, including mobile board views. */
+.top{position:relative;z-index:10}
+.stage{isolation:isolate;overflow:hidden}
+@media(max-width:600px){
+ body[data-role=display] .top{height:48px;min-height:48px;padding:4px 8px;gap:8px}
+ body[data-role=display] .top .brand{font-size:0;letter-spacing:0;flex:0 0 32px;text-align:center}
+ body[data-role=display] .top .brand::before{content:'⌂';font-size:24px;color:#6df8db}
+ body[data-role=display] .top .brand span{display:none}
+ body[data-role=display] .tools{flex:1;min-width:0;justify-content:flex-end;gap:6px}
+ body[data-role=display] #connection{font-size:0}
+ body[data-role=display] #connection::before{content:'●';font-size:9px;color:#bcb4d1}
+ body[data-role=display] #connection[data-online=true]::before{color:#6df8db}
+ body[data-role=display] .tools select{height:40px;max-width:90px;padding:8px 4px;font-size:12px}
+ body[data-role=display] .invite-player{width:40px;height:40px;min-width:40px;justify-content:center;padding:8px}
+ body[data-role=display] .invite-player span{display:none}
+}

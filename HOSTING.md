@@ -7,7 +7,19 @@ npm install
 npx retro-museum-host --package dist/game.rmg.json
 ```
 
-Open `http://localhost:4311` and click **Play now**. The organiser gets a display, an invitation link and a QR code. Each phone joins with its own saved name, cropped avatar and language. Only the organiser can start, pause, resume or end a match. Players can replay completed matches. A late arrival spectates until the next match.
+Open `http://localhost:4311` and choose **Play solo** or **Play together**.
+Solo is offered when the manifest declares `players.min: 1` or the game provides
+robot opponents. It enrolls the creator as one human player and completes the
+minimum seats with medium robots when needed. Each robot's difficulty can be
+changed before starting. The creator keeps organiser controls on that device.
+The shared-screen route also offers **Play on this device**.
+
+Games may declare `singleDeviceView: "controller"` when their player view already
+contains the complete board and controls (UNO and Chess). Other solo activities
+open `?view=combined` by default. The screen toggle remains available. Mobile
+host controls stay compact, with settings in a collapsible panel.
+
+For shared play, the organiser gets a display, an invitation link and a QR code. Each phone joins with its own saved name, cropped avatar and language. Only the organiser can start, pause, resume or end a match. Players can replay completed matches. A late arrival spectates until the next match.
 
 On a LAN, set `PUBLIC_ORIGIN` to the reachable address of the computer. Behind an HTTPS proxy, set it to the public HTTPS origin. `PORT` defaults to 4311. `DATA_DIR` defaults to `.local/rooms` and must be durable if sessions should survive restarts. The organiser credential is private; the invitation only grants a player seat. Profiles use the browser's local storage, shared across games on the same origin.
 
@@ -49,3 +61,68 @@ package is checkpointed with the room and restored by hash after restart.
 Only trusted server code supplies this definition; never pass an uploaded engine
 through this API without its own code-review boundary. The Tara integration uses
 only questionnaire data inside the host's pinned quiz engine.
+
+## Robot players (capability API 1)
+
+An engine can opt in through its manifest:
+
+```json
+{"bots":{"apiVersion":1,"difficulties":["easy","medium","hard"]}}
+```
+
+Implement `botAction(playerId, difficulty)` alongside the other engine methods.
+Return `null` if the robot should wait, or `{action, value}` for one legal player
+command. Decisions must not mutate the engine. The host executes the command
+through normal player-action validation and applies the existing 40 ms VM limit.
+Decisions must use only public information and that robot's own private state.
+API 1 does not yet support games declaring `lobbyActions`.
+
+Room creation and organiser-only `configure` accept a `bots` array, for example
+`[{difficulty:"easy"},{difficulty:"hard"}]`. To keep a robot while changing its
+level, include its server-issued `id`. Omit it to create a robot; omitting an
+existing robot from the array removes it. A game must retain at least one human
+seat. Rosters cannot change after starting. The pilot games are UNO and Chess;
+other multiplayer games remain unavailable in solo until their engines opt in.
+
+The host creates robot identities without browser credentials or sockets. Names,
+levels and identities persist in room checkpoints and rematches. Robots stop
+when the match pauses, and do not prevent empty-room suspension or expiry.
+Robot callbacks are sampled at most once per host tick with per-robot thinking
+intervals. Chess robot games are practice and never update local Elo.
+
+### Open the board or your controls on another device
+
+In a player session, **Use another device** offers a link and QR code for either
+of these views:
+
+- **Shared board** opens `/r/:room?view=screen`, a read-only display without the
+  invitation sidebar. Opening it does not create a player.
+- **My personal screen** resumes the current player with `view=controller`.
+  The authenticated player creates a transfer using `POST /api/rooms/:room/handoff`
+  with their bearer credential. The returned URL contains a random transfer key
+  in its fragment, never the player credential or organiser token. The receiving
+  browser removes the fragment, redeems it using `POST /api/rooms/:room/redeem`,
+  and stores the existing player credential locally. Name, avatar, private state,
+  and player identity are preserved. Organiser privileges stay on the source device.
+
+Transfers are single use, expire after five minutes, and are kept only in server
+memory. Creating another transfer invalidates the previous transfer for that
+player. Treat this link as private: whoever redeems it can control that player.
+The original browser keeps access to the same player. After scanning, the source
+browser can show only the board, or retain only its controls using the modal's
+local-view button. Neither action starts a new match.
+
+
+### Invitations and paused rooms
+
+The invitation button stays available in player and shared-board views, including
+on mobile while the game is paused. Invitation dialogs sit above room content;
+a game's pause overlay remains confined to its iframe.
+
+A shared-board connection can authenticate the organiser with `hostToken` in its
+WebSocket hello. This keeps the room available while phones are disconnected,
+including during a manual pause. It grants no player identity and still receives
+only public game state. Public display connections cannot extend retention.
+Once the last authenticated player or organiser disconnects, the room releases
+active capacity after 30 seconds and expires after ten minutes. New arrivals and
+returning players do not clear an organiser's manual pause; only Resume does.

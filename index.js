@@ -12,6 +12,11 @@ export function validatePackage(bytes){
    game=new GameRuntime(pack,players);
    const publicView=game.snapshot();if(publicView?.private)throw new Error('Public view exposes a private field.');
    const own=players.map(p=>game.snapshot(p.id));
+   if(pack.manifest.bots)for(const difficulty of pack.manifest.bots.difficulties){
+    const choice=game.botAction(players[0].id,difficulty);
+    if(choice!==null&&(typeof choice!=='object'||typeof choice.action!=='string'||choice.action.startsWith('host')||choice.action==='playAgain'))throw Error('Invalid robot decision');
+    if(JSON.stringify(game.snapshot())!==JSON.stringify(publicView)||players.some((p,i)=>JSON.stringify(game.snapshot(p.id))!==JSON.stringify(own[i])))throw Error('Robot decisions must not mutate game state');
+   }
    const save=game.save();restored=new GameRuntime(pack,players,save);
    if(JSON.stringify(restored.snapshot())!==JSON.stringify(publicView)||players.some((p,i)=>JSON.stringify(restored.snapshot(p.id))!==JSON.stringify(own[i])))throw new Error('Save/restore changed a public or private view.');
    game.addPlayer({id:'late-player',number:count+1});game.release(players[0].id);

@@ -9,3 +9,10 @@ test('unsupported or denied native sharing falls back to copy and then manual se
  const manual=await shareInvitation({url,navigator:{share:async()=>{throw Error('blocked');}},document:null});assert.equal(manual.status,'manual');assert.equal(manual.url,url);
  await assert.rejects(shareInvitation({url:'javascript:alert(1)',navigator:{},document:null}),/Invalid invitation/);
 });
+test('QR dialog copies the public link without opening native sharing automatically',async()=>{
+ let copied;
+ const result=await shareInvitation({url,nativeShare:false,navigator:{share:()=>assert.fail('QR dialog must stay visible'),clipboard:{writeText:async text=>copied=text}},document:null});
+ assert.equal(result.status,'copied');assert.equal(copied,url);
+ const denied=await shareInvitation({url,nativeShare:false,navigator:{share:()=>assert.fail(),clipboard:{writeText:async()=>{throw Error('Clipboard denied');}}},document:null});
+ assert.equal(denied.status,'manual');assert.equal(denied.url,url);
+});

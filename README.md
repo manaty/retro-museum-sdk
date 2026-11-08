@@ -65,7 +65,7 @@ Views may announce `{ retroMuseum: 1, type: 'ready', renderAck: true }` and answ
 
 ## Player invitations and live catalogs
 
-Every standalone player screen includes **Invite a player**, translated into English, French and Tagalog. It opens the device's native share sheet when available, then falls back to copying or selecting the invitation URL. Cancelling a share does not copy anything. The payload contains the public join URL, never a player credential or organiser token. The museum can reuse this control through `@manaty/retro-museum-sdk/share`.
+Every standalone player screen includes **Invite a player**, translated into English, French and Tagalog. It immediately opens a QR-code dialog and copies the invitation URL when the browser permits it. The dialog keeps the link selectable if copying is blocked, offers another copy button, and provides explicit native sharing when available. The payload and QR contain the public join URL, never a player credential or organiser token. The museum can reuse this control through `@manaty/retro-museum-sdk/share`; supply a `qrUrl` callback to enable the QR dialog. Without that callback, the existing native-share-first behavior remains supported.
 
 Hosts can add approved immutable packages through `registerGame(definition)` and remove games from new-room listings through `removeGame(id)`. Existing rooms keep their original package, including after restart. `refreshGames` allows a host to resolve a newly published game when its direct URL is opened. Package registration is an operator-side API; no public route accepts arbitrary code or repository URLs.
 

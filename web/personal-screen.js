@@ -66,9 +66,10 @@ export function createPersonalScreen({toolbar,language,protocol,hello,project=s=
   watchdog=setInterval(()=>{if(!enabled)return;if(socket?.readyState===1&&Date.now()-lastMessage>12000){const old=socket;socket=null;old.close();online=false;open();}else if(!socket||socket.readyState>1)open();},5000);
  }
  function update(){button.textContent=text('mode');button.setAttribute('aria-pressed',String(enabled));button.title=text('mode');if(frame)frame.title=text('screen');status();}
- button.onclick=()=>{enabled=!enabled;try{localStorage.setItem(preference,enabled?'1':'0');}catch{}
+ function setEnabled(value){enabled=Boolean(value);try{localStorage.setItem(preference,enabled?'1':'0');}catch{}
   const url=new URL(location.href);url.searchParams.set('view',enabled?'combined':'controller');history.replaceState(null,'',url.pathname+url.search+url.hash);
-  onToggle(enabled);attach(container);update();};
+  onToggle(enabled);attach(container);update();}
+ button.onclick=()=>setEnabled(!enabled);
  function message(event){
   if(event.source!==frame?.contentWindow||event.data?.retroMuseum!==1)return;const m=event.data;
   if(m.type==='ready'){ready=true;renderAck=m.renderAck===true;inFlight=0;status();sendFrame();}
@@ -80,5 +81,5 @@ export function createPersonalScreen({toolbar,language,protocol,hello,project=s=
  }
  addEventListener('message',message);
  const wake=()=>{if(!document.hidden&&enabled){open();resize();schedule();}};document.addEventListener('visibilitychange',wake);
- update();return {attach,update,get enabled(){return enabled;},dispose(){stop();remove();button.remove();removeEventListener('message',message);removeEventListener('resize',resize);document.removeEventListener('visibilitychange',wake);}};
+ update();return {attach,update,setEnabled,get enabled(){return enabled;},dispose(){stop();remove();button.remove();removeEventListener('message',message);removeEventListener('resize',resize);document.removeEventListener('visibilitychange',wake);}};
 }

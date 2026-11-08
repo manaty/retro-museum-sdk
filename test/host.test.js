@@ -92,3 +92,26 @@ test('host-limited activities admit a classroom and integer options reject out-o
  const def={...definition,playerCapacity:80,pack:{...definition.pack,manifest:{...definition.pack.manifest,players:{min:1,max:null},options:{questionCount:{type:'integer',min:1,max:100,default:10}}}}};
  const party=new RoomParty({definition:def});try{for(let i=0;i<80;i++)party.join('p'+i);assert.equal(party.maxPlayers,80);assert.equal(party.snapshot().canJoin,false);assert.throws(()=>party.join('overflow'),/partyFull/);assert.equal(party.validateOptions({questionCount:73}).questionCount,73);assert.throws(()=>party.validateOptions({questionCount:101}));assert.throws(()=>party.validateOptions({questionCount:'10'}));}finally{party.dispose();}
 });
+
+test('personal screen handoff preserves identity, expires, is single use and grants no organiser rights',async()=>{
+ let now=1000;const host=await createGameHost({definitions:[definition],clock:()=>now,basePath:'/play'});await new Promise(r=>host.server.listen(0,'127.0.0.1',r));
+ const base='http://127.0.0.1:'+host.server.address().port+'/play';
+ const post=async(path,data={},token)=>fetch(base+path,{method:'POST',headers:{'Content-Type':'application/json',...(token?{Authorization:'Bearer '+token}:{})},body:JSON.stringify(data)});
+ try{
+  const room=await(await post('/api/rooms',{game:'test-game'})).json(),other=await(await post('/api/rooms',{game:'test-game'})).json(),path='/api/rooms/'+room.id;
+  const player=await(await post(path+'/join',{profile:{name:'Ada',avatar:null}})).json();
+  assert.equal((await post(path+'/handoff')).status,401);
+  assert.equal((await post(path+'/handoff',{},room.hostToken)).status,401);
+  const link=await(await post(path+'/handoff',{},player.token)).json(),key=new URL(link.url).hash.slice('#transfer='.length);
+  assert.ok(link.url.includes('/play/j/'+room.id+'?view=controller#transfer='));assert.ok(!link.url.includes(player.token));
+  assert.equal((await fetch(new URL(link.qrUrl,base))).status,200);
+  assert.equal((await post('/api/rooms/'+other.id+'/redeem',{transfer:key})).status,410);
+  const redeemed=await(await post(path+'/redeem',{transfer:key})).json();assert.equal(redeemed.token,player.token);assert.equal(redeemed.profile.name,'Ada');
+  const joined=await(await post(path+'/join',{token:redeemed.token})).json();assert.equal(joined.playerId,player.playerId);assert.equal(Object.keys(host.rooms.get(room.id).members).length,1);
+  assert.equal((await post(path+'/control',{action:'start'},redeemed.token)).status,403);
+  assert.equal((await post(path+'/redeem',{transfer:key})).status,410);assert.equal((await fetch(new URL(link.qrUrl,base))).status,410);
+  const expired=await(await post(path+'/handoff',{},player.token)).json();now+=300001;
+  assert.equal((await post(path+'/redeem',{transfer:new URL(expired.url).hash.slice('#transfer='.length)})).status,410);
+  assert.equal((await fetch(base+path+'/qr?view=screen')).status,200);
+ }finally{await host.close();}
+});

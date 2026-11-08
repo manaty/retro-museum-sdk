@@ -2,7 +2,7 @@ import {getQuickJS} from 'quickjs-emscripten';
 import {randomInt} from 'node:crypto';
 import {prepareData} from './data.js';
 const QuickJS=await getQuickJS();
-const METHODS=new Set(['action','advance','snapshot','save','release','addPlayer','status']);
+const METHODS=new Set(['action','advance','snapshot','save','release','addPlayer','status','botAction']);
 export class GameRuntime {
  constructor(pack,players=[],saved=null,options={}){
   const lookup=prepareData(pack);
@@ -36,6 +36,7 @@ export class GameRuntime {
  save(){return this.call('save');}
  release(id){return this.call('release',[id||null]);}
  addPlayer(player){return this.call('addPlayer',[player]);}
+ botAction(id,difficulty){return this.call('botAction',[id,difficulty]);}
  get winner(){return this.metadata?.winner||null;}
  dispose(){if(this.context){this.context.dispose();this.context=null;this.runtime.dispose();}}
 }
